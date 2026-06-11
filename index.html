@@ -935,18 +935,25 @@ async function importPDF(file) {
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
-    // group text items into visual lines by Y coordinate
-    const rows = new Map();
+    // group text items into visual lines: cluster by Y with a small gap tolerance
+    const items = [];
     for (const it of content.items) {
       if (!it.str || !it.str.trim()) continue;
-      const y = Math.round(it.transform[5] / 2.5) * 2.5;
-      if (!rows.has(y)) rows.set(y, []);
-      rows.get(y).push({ x: it.transform[4], str: it.str });
+      items.push({ x: it.transform[4], y: it.transform[5], str: it.str });
     }
-    const lines = [...rows.entries()]
-      .sort((a, b) => b[0] - a[0])
-      .map(([, items]) => items.sort((a, b) => a.x - b.x).map((i) => i.str).join(" ").replace(/\s+/g, " ").trim());
-    pageLines.push(...lines);
+    items.sort((a, b) => b.y - a.y || a.x - b.x);
+    let cur = [], curY = null;
+    const flush = () => {
+      if (!cur.length) return;
+      pageLines.push(cur.sort((a, b) => a.x - b.x).map((i) => i.str).join(" ").replace(/\s+/g, " ").trim());
+      cur = [];
+    };
+    for (const it of items) {
+      if (curY !== null && Math.abs(curY - it.y) > 3) flush();
+      cur.push(it);
+      curY = it.y;
+    }
+    flush();
   }
   try { pdf.destroy(); } catch {}
   return parsePdfLines(pageLines, file.name);
@@ -982,50 +989,38 @@ function extractTrailingAmounts(s) {
   return { amounts, narration: rest };
 }
 
+function isHeaderLine(line) {
+  const l = line.toLowerCase();
+  return /date/.test(l) && /balance/.test(l) &&
+    /(withdrawal|debit|deposit|credit|narration|particulars|description)/.test(l) &&
+    !/[\d,]+\.\d{2}/.test(l);
+}
+
+// Bank PDFs come in two row layouts:
+//  - single-line: "DD/MM/YYYY NARRATION REF [VALUE-DT] AMT [AMT] BALANCE"
+//  - multi-line (HDFC etc.): a date line, wrapped narration lines, then a
+//    closing line "REF [VALUE-DT] AMT [AMT] BALANCE". The parser is stateful:
+//    a date opens a pending transaction and the next amounts line closes it.
 function parsePdfLines(lines, fileName) {
   const order = detectAmountOrder(lines);
   const out = [];
   let candidates = 0, parsed = 0;
   let prevBalance = null;
+  let pendingDate = null;  // txn date waiting for its amounts line
+  let pendingText = [];    // narration fragments of the open txn
+  let orphans = [];        // fragments seen before any date (narration may start above the date cell)
 
-  for (const line of lines) {
-    if (JUNK_LINE_RE.test(line)) continue;
-    const dm = line.match(DATE_LINE_RE);
-    if (!dm) {
-      // possible narration continuation for the previous transaction
-      if (out.length && line.length > 1 && line.length < 70 &&
-          !/[\d,]+\.\d{2}/.test(line) && /[A-Za-z]{3}/.test(line) &&
-          !/total|balance|opening|closing/i.test(line)) {
-        out[out.length - 1].narration = (out[out.length - 1].narration + " " + line).trim().slice(0, 200);
-      }
-      continue;
-    }
-    const date = parseDate(dm[1]);
-    if (!date) continue;
-    if (/opening balance|brought forward|b\/f\b|balance forward/i.test(line)) {
-      const { amounts } = extractTrailingAmounts(dm[2]);
-      if (amounts.length) prevBalance = amounts[amounts.length - 1].v;
-      continue;
-    }
-    candidates++;
-
-    let { amounts, narration } = extractTrailingAmounts(dm[2]);
-    // a second date in the row is usually the value date — drop it from narration end
-    narration = narration.replace(/\s+\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\s*$/, "").trim();
-    if (amounts.length < 2) continue; // need at least amount + balance
-
-    let withdrawal = null, deposit = null, balance = null;
+  const pushTxn = (date, narration, ref, amounts) => {
+    let withdrawal = null, deposit = null;
     const balTok = amounts[amounts.length - 1];
-    balance = balTok.flag === "dr" ? -Math.abs(balTok.v) : balTok.v;
+    const balance = balTok.flag === "dr" ? -Math.abs(balTok.v) : balTok.v;
     const mids = amounts.slice(0, -1);
-
     if (mids.length === 2) {
       const a = mids[0].v, b = mids[1].v;
       if (order[0] === "deposit") { deposit = a || null; withdrawal = b || null; }
       else { withdrawal = a || null; deposit = b || null; }
     } else { // single amount + balance — resolve direction
-      const t = mids[0];
-      const amt = Math.abs(t.v);
+      const t = mids[0], amt = Math.abs(t.v);
       if (t.flag === "dr") withdrawal = amt;
       else if (t.flag === "cr") deposit = amt;
       else if (prevBalance !== null && balance !== null) {
@@ -1034,17 +1029,77 @@ function parsePdfLines(lines, fileName) {
       else deposit = amt;
     }
     prevBalance = balance;
-    if (withdrawal === null && deposit === null) continue;
+    if (withdrawal === null && deposit === null) return false;
+    narration = narration.replace(/\s+/g, " ").trim().slice(0, 220);
+    if (!ref) {
+      const m = narration.match(/\b([A-Z0-9]*\d{6,18})\b(?!.*\b[A-Z0-9]*\d{6,18}\b)/);
+      ref = m ? m[1] : "";
+    }
+    out.push({ date, narration, ref_no: ref, withdrawal, deposit, balance });
+    return true;
+  };
 
-    const refMatch = narration.match(/\b([A-Z0-9]*\d{6,18})\b(?!.*\b[A-Z0-9]*\d{6,18}\b)/);
-    out.push({
-      date,
-      narration: narration.slice(0, 200),
-      ref_no: refMatch ? refMatch[1] : "",
-      withdrawal, deposit, balance,
-    });
-    parsed++;
+  // pull the ref no and value date out of the text preceding the amounts
+  const splitRefDate = (s) => {
+    let ref = "";
+    const leftover = [];
+    for (const tok of s.split(/\s+/)) {
+      if (!tok) continue;
+      if (/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}$/.test(tok)) continue; // value date
+      if (!ref && /^[A-Za-z0-9]{6,22}$/.test(tok) && (tok.match(/\d/g) || []).length >= 4) { ref = tok; continue; }
+      leftover.push(tok);
+    }
+    return { ref, extra: leftover.join(" ") };
+  };
+
+  for (const raw of lines) {
+    const line = raw.replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (JUNK_LINE_RE.test(line) || isHeaderLine(line)) continue;
+
+    if (/opening balance|brought forward|b\/f\b|balance forward/i.test(line)) {
+      const { amounts } = extractTrailingAmounts(line);
+      if (amounts.length) prevBalance = amounts[amounts.length - 1].v;
+      pendingDate = null; pendingText = []; orphans = [];
+      continue;
+    }
+
+    const { amounts, narration: rem } = extractTrailingAmounts(line);
+    const dm = rem.match(DATE_LINE_RE);
+    const lineDate = dm ? parseDate(dm[1]) : null;
+    const afterDate = dm ? dm[2].trim() : "";
+
+    if (amounts.length >= 2) { // this line completes a transaction
+      if (lineDate && (afterDate || !pendingDate)) {
+        // single-line row; stray fragments above it belong to the previous txn
+        if (orphans.length && out.length) {
+          const prev = out[out.length - 1];
+          prev.narration = (prev.narration + " " + orphans.join(" ")).trim().slice(0, 220);
+        }
+        candidates++;
+        const narr = afterDate.replace(/\s+\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\s*$/, "").trim();
+        if (pushTxn(lineDate, narr, "", amounts)) parsed++;
+      } else if (pendingDate) {
+        candidates++;
+        const { ref, extra } = splitRefDate(rem);
+        if (pushTxn(pendingDate, [...orphans, ...pendingText, extra].join(" "), ref, amounts)) parsed++;
+      }
+      // amounts with no date context (totals/summary rows) are ignored
+      pendingDate = null; pendingText = []; orphans = [];
+    } else if (lineDate) {
+      if (pendingDate) candidates++; // the open txn never got an amounts line
+      pendingDate = lineDate;
+      pendingText = orphans.concat(afterDate ? [afterDate] : []);
+      orphans = [];
+    } else if (pendingDate) {
+      if (pendingText.length < 8) pendingText.push(line);
+    } else if (/[A-Za-z0-9]{3}/.test(line) && line.length < 90 &&
+               !/^(total|statement|summary|closing|generated)/i.test(line)) {
+      orphans.push(line);
+      if (orphans.length > 4) orphans.shift();
+    }
   }
+  if (pendingDate) candidates++; // trailing unclosed txn
 
   if (candidates > 0 && parsed / candidates < 0.5) {
     showWarning(`Could not fully parse "${fileName}" — ${parsed} of ${candidates} rows matched. You can manually review unmatched rows in the original PDF.`);
@@ -1297,6 +1352,8 @@ function exportPdfReport() {
   const rows = [...filteredCache].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
   const totalDebit = rows.reduce((s, t) => s + (t.withdrawal || 0), 0);
   const totalCredit = rows.reduce((s, t) => s + (t.deposit || 0), 0);
+  const debitCount = rows.filter((t) => t.withdrawal != null).length;
+  const creditCount = rows.filter((t) => t.deposit != null).length;
   const net = totalCredit - totalDebit;
   const firstBal = rows.find((t) => t.balance != null);
   const lastBal = [...rows].reverse().find((t) => t.balance != null);
@@ -1315,9 +1372,9 @@ function exportPdfReport() {
     startY: 94,
     head: [["Consolidated summary", ""]],
     body: [
-      ["Transactions in report", String(rows.length)],
-      ["Total debits (money out)", rs(totalDebit)],
-      ["Total credits (money in)", rs(totalCredit)],
+      ["Transaction count", `${rows.length} total  ·  ${debitCount} debits  ·  ${creditCount} credits`],
+      [`Total debits (money out, ${debitCount} txns)`, rs(totalDebit)],
+      [`Total credits (money in, ${creditCount} txns)`, rs(totalCredit)],
       [net >= 0 ? "Net flow - surplus / owed to you" : "Net flow - deficit / you owe",
        (net >= 0 ? "+" : "-") + rs(Math.abs(net))],
       ["Opening balance (start of results)", rs(opening)],
