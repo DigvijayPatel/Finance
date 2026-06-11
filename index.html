@@ -118,6 +118,11 @@ header.topbar {
   flex: 1; min-width: 160px; background: var(--surface-2); border: 0.5px solid var(--border);
   border-radius: 8px; padding: 7px 10px;
 }
+.pw-remember {
+  display: flex; align-items: center; gap: 7px; margin-top: 9px;
+  font-size: 12.5px; color: var(--text-muted); cursor: pointer; user-select: none;
+}
+.pw-remember input { accent-color: var(--accent); }
 
 /* ---- Banners & toasts ---- */
 .banner {
@@ -301,6 +306,10 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
       <button class="btn primary" id="pwSubmit">Unlock</button>
       <button class="btn" id="pwCancel">Cancel</button>
     </div>
+    <label class="pw-remember">
+      <input type="checkbox" id="pwRemember">
+      Remember this password and try it on other protected files (this session only)
+    </label>
   </div>
 
   <div class="banner" id="warnBanner">
@@ -854,11 +863,15 @@ function importQIF(text) {
 
 /* ---------- PDF ---------- */
 
-function promptPassword(fileName, wasWrong) {
+// passwords the user chose to remember — kept in memory only, never persisted
+let sessionPasswords = [];
+
+function promptPassword(fileName, message) {
   return new Promise((resolve) => {
     const box = $("pwPrompt"), input = $("pwInput"), err = $("pwErr");
     $("pwTitle").textContent = `"${fileName}" is password-protected — enter the password to parse it`;
-    err.style.display = wasWrong ? "block" : "none";
+    err.textContent = message || "";
+    err.style.display = message ? "block" : "none";
     box.classList.add("show");
     input.value = "";
     input.focus();
@@ -867,26 +880,38 @@ function promptPassword(fileName, wasWrong) {
       $("pwSubmit").onclick = $("pwCancel").onclick = input.onkeydown = null;
       resolve(val);
     };
-    $("pwSubmit").onclick = () => done(input.value);
+    const submit = () => done({ password: input.value, remember: $("pwRemember").checked });
+    $("pwSubmit").onclick = submit;
     $("pwCancel").onclick = () => done(null);
-    input.onkeydown = (e) => { if (e.key === "Enter") done(input.value); };
+    input.onkeydown = (e) => { if (e.key === "Enter") submit(); };
   });
 }
 
 async function openPdf(buf, fileName) {
-  let password;
-  for (let attempt = 0; attempt < 6; attempt++) {
+  // try unprotected first, then any remembered passwords, then prompt the user
+  const queue = [undefined, ...sessionPasswords];
+  const hadSaved = sessionPasswords.length > 0;
+  let entry = null; // last prompt result { password, remember }
+  let asked = false;
+  while (true) {
+    const password = queue.length ? queue.shift() : entry.password;
     try {
       // slice() because PDF.js transfers the buffer to its worker
-      return await pdfjsLib.getDocument({ data: buf.slice(0), password }).promise;
+      const pdf = await pdfjsLib.getDocument({ data: buf.slice(0), password }).promise;
+      if (entry && entry.remember && entry.password === password && !sessionPasswords.includes(password))
+        sessionPasswords.push(password);
+      return pdf;
     } catch (e) {
-      if (e && e.name === "PasswordException") {
-        password = await promptPassword(fileName, password !== undefined);
-        if (password === null) return null; // user cancelled
-      } else throw e;
+      if (!(e && e.name === "PasswordException")) throw e;
+      if (queue.length) continue; // silently try the next remembered password
+      const message = asked
+        ? "Incorrect password — please try again."
+        : (hadSaved ? "The remembered password didn't work for this file — enter its password." : "");
+      entry = await promptPassword(fileName, message);
+      asked = true;
+      if (entry === null) return null; // user cancelled
     }
   }
-  return null;
 }
 
 async function importPDF(file) {
