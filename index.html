@@ -370,6 +370,12 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
         <div class="empty-note" id="unusualEmpty">No unusual transactions flagged.</div>
       </div>
     </div>
+
+    <div class="panel">
+      <h3>Possible duplicate transactions <span class="src-chip">(identical rows within the same statement — review and clean if over-counted)</span></h3>
+      <div id="dupList"></div>
+      <div class="empty-note" id="dupEmpty">No same-statement duplicates detected.</div>
+    </div>
   </div>
 
   <!-- ================= TRANSACTIONS ================= -->
@@ -655,27 +661,39 @@ function txKey(t) {
   return "k:" + t.date + "|" + amt + "|" + narr;
 }
 
-function mergeTransactions(incoming, sourceName) {
+function mergeTransactions(incoming, sourceName, hash) {
   const existing = new Set(transactions.map(txKey));
-  let added = 0, dupes = 0;
+  const batchKeys = new Set();
+  let added = 0, dupes = 0, flagged = 0;
   for (const t of incoming) {
     if (!t.date) continue;
     t.source_file = sourceName;
     t.tag = detectTag(t.narration);
     const k = txKey(t);
-    if (existing.has(k)) { dupes++; continue; }
+    if (batchKeys.has(k)) {
+      // repeated within the same statement: an identical ref no twice is an
+      // extraction artifact (skip); without a ref it may be a genuine repeat —
+      // keep it but flag it for review in the duplicates panel
+      if (k.startsWith("r:")) { dupes++; continue; }
+      t.dup = true;
+      flagged++;
+    } else if (existing.has(k)) {
+      dupes++; // already imported from a previous file
+      continue;
+    }
+    batchKeys.add(k);
     existing.add(k);
     transactions.push(t);
     added++;
   }
-  if (added > 0) {
-    transactions.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-    const src = meta.sources.find((s) => s.name === sourceName);
-    if (src) { src.count += added; src.importedAt = new Date().toISOString(); }
-    else meta.sources.push({ name: sourceName, count: added, importedAt: new Date().toISOString() });
-  }
+  if (added > 0) transactions.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  // record the source (and its content hash) even if everything was a duplicate,
+  // so re-uploads of the same file are skipped before parsing
+  const src = meta.sources.find((s) => s.name === sourceName);
+  if (src) { src.count += added; src.importedAt = new Date().toISOString(); if (hash) src.hash = hash; }
+  else meta.sources.push({ name: sourceName, hash, count: added, importedAt: new Date().toISOString() });
   saveState();
-  return { added, dupes };
+  return { added, dupes, flagged };
 }
 
 /* ============================ file import ============================ */
@@ -695,6 +713,15 @@ fileInput.addEventListener("change", () => {
   fileInput.value = "";
 });
 
+async function fileFingerprint(file) {
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return "ns:" + file.name + ":" + file.size; // crypto unavailable (non-secure context)
+  }
+}
+
 async function handleFiles(fileList) {
   const files = Array.from(fileList);
   dropzone.classList.add("busy");
@@ -703,6 +730,13 @@ async function handleFiles(fileList) {
     dzTitle.textContent = `Parsing ${file.name}…`;
     const ext = (file.name.split(".").pop() || "").toLowerCase();
     try {
+      // skip files whose exact content was already imported
+      const hash = await fileFingerprint(file);
+      const dupSrc = meta.sources.find((s) => s.hash && s.hash === hash);
+      if (dupSrc) {
+        toast(`Duplicate file skipped: "${file.name}" — identical to already-imported "${dupSrc.name}".`, "error");
+        continue;
+      }
       let txns = [];
       if (ext === "pdf") txns = await importPDF(file);
       else if (ext === "csv" || file.type === "text/csv") txns = importCSV(await file.text());
@@ -716,8 +750,10 @@ async function handleFiles(fileList) {
         toast(`No transactions found in ${file.name}.`, "error");
         continue;
       }
-      const { added, dupes } = mergeTransactions(txns, file.name);
-      toast(`${file.name}: ${added} new transaction${added === 1 ? "" : "s"} added, ${dupes} duplicate${dupes === 1 ? "" : "s"} skipped`, "success");
+      const { added, dupes, flagged } = mergeTransactions(txns, file.name, hash);
+      let msg = `${file.name}: ${added} new transaction${added === 1 ? "" : "s"} added, ${dupes} duplicate${dupes === 1 ? "" : "s"} skipped`;
+      if (flagged) msg += `, ${flagged} possible in-statement duplicate${flagged === 1 ? "" : "s"} kept (see Overview)`;
+      toast(msg, "success");
     } catch (err) {
       console.error("Import failed", file.name, err);
       toast(`Failed to parse ${file.name}: ${err.message || err}`, "error");
@@ -1459,8 +1495,20 @@ function renderCards() {
     ["Net flow", (net >= 0 ? "+₹" : "−₹") + fmtINR(Math.abs(net)), net >= 0 ? "pos" : "neg"],
     ["Transactions", sorted.length.toLocaleString("en-IN"), ""],
   ];
-  wrap.innerHTML = cards.map(([label, value, cls]) =>
+  let html = cards.map(([label, value, cls]) =>
     `<div class="card"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`).join("");
+  // sanity check: opening + net flow should reconcile with the closing balance
+  if (opening != null && closing && closing.balance != null) {
+    const gap = opening + net - closing.balance;
+    if (Math.abs(gap) > 1) {
+      html += `<div class="card" style="grid-column:1/-1;border-color:var(--amber);background:var(--amber-soft)">
+        <div class="label">Data check — totals don't reconcile</div>
+        <div class="value" style="font-size:13px;font-weight:450">Opening balance + net flow differs from the closing balance by ₹${fmtINR(Math.abs(gap))}.
+        This usually means duplicate or overlapping imports — review the "Possible duplicate transactions" panel below,
+        or use "Clear all data" and re-import each statement once.</div></div>`;
+    }
+  }
+  wrap.innerHTML = html;
 }
 
 function chartTheme() {
@@ -1603,12 +1651,41 @@ function renderUnusual() {
   $("unusualEmpty").style.display = flagged.length ? "none" : "block";
 }
 
+function renderDuplicates() {
+  const groups = new Map();
+  for (const t of transactions) {
+    const amt = t.withdrawal != null ? "w" + t.withdrawal : "d" + (t.deposit || 0);
+    const k = t.source_file + "|" + t.date + "|" + amt + "|" +
+      String(t.narration || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 60);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(t);
+  }
+  const dups = [...groups.values()].filter((g) => g.length > 1)
+    .sort((a, b) => (b.length - 1) * txAmount(b[0]) - (a.length - 1) * txAmount(a[0]));
+  const impact = dups.reduce((s, g) => s + (g.length - 1) * txAmount(g[0]), 0);
+  let html = "";
+  if (dups.length) {
+    html += `<div class="li-sub" style="padding-bottom:6px">${dups.length} group${dups.length === 1 ? "" : "s"} · potential double-count impact ₹${fmtINR(impact)}</div>`;
+    html += dups.slice(0, 15).map((g) => `
+      <div class="list-item">
+        <div class="li-main">
+          <div class="li-title">${escapeHtml(g[0].narration || "(no description)")}</div>
+          <div class="li-sub">${fmtDateDisp(g[0].date)} · appears ${g.length}× in ${escapeHtml(g[0].source_file)}</div>
+        </div>
+        <div class="li-amt" style="color:${g[0].withdrawal != null ? "var(--red)" : "var(--green)"}">₹${fmtINR(txAmount(g[0]))} ×${g.length}</div>
+      </div>`).join("");
+  }
+  $("dupList").innerHTML = html;
+  $("dupEmpty").style.display = dups.length ? "none" : "block";
+}
+
 function renderDashboard() {
   renderCards();
   renderCharts();
   renderTopPayees();
   renderRecurring();
   renderUnusual();
+  renderDuplicates();
 }
 
 function refreshAll() {
