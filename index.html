@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BankDash — Bank Statement Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #fafbfc;
+  --text: #1a1f27;
+  --text-muted: #6b7280;
+  --border: rgba(26, 31, 39, 0.16);
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.08);
+  --green: #16a34a;
+  --green-soft: rgba(22, 163, 74, 0.1);
+  --red: #dc2626;
+  --red-soft: rgba(220, 38, 38, 0.1);
+  --amber: #d97706;
+  --amber-soft: rgba(217, 119, 6, 0.12);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --chart-grid: rgba(26, 31, 39, 0.08);
+}
+html[data-theme="dark"] {
+  --bg: #0e1116;
+  --surface: #161b22;
+  --surface-2: #1b212a;
+  --text: #e6e9ee;
+  --text-muted: #8b94a3;
+  --border: rgba(230, 233, 238, 0.16);
+  --accent: #5b8def;
+  --accent-soft: rgba(91, 141, 239, 0.12);
+  --green: #34c272;
+  --green-soft: rgba(52, 194, 114, 0.12);
+  --red: #f0635a;
+  --red-soft: rgba(240, 99, 90, 0.12);
+  --amber: #e8a33d;
+  --amber-soft: rgba(232, 163, 61, 0.14);
+  --shadow: none;
+  --chart-grid: rgba(230, 233, 238, 0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.container { max-width: 1180px; margin: 0 auto; padding: 16px; }
+button { font: inherit; cursor: pointer; color: inherit; }
+input, select { font: inherit; color: var(--text); }
+
+/* ---- Header ---- */
+header.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .logo {
+  width: 34px; height: 34px; border-radius: 8px; background: var(--accent);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 16px;
+}
+.brand h1 { font-size: 18px; font-weight: 650; }
+.brand .sub { font-size: 12px; color: var(--text-muted); }
+.topbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn {
+  background: var(--surface); border: 0.5px solid var(--border); border-radius: 8px;
+  padding: 7px 13px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow);
+}
+.btn:hover { background: var(--surface-2); }
+.btn.danger { color: var(--red); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { opacity: 0.92; background: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---- Tabs ---- */
+.tabs {
+  display: flex; gap: 4px; background: var(--surface); border: 0.5px solid var(--border);
+  border-radius: 10px; padding: 4px; width: fit-content; margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+.tabs button {
+  border: none; background: transparent; padding: 7px 20px; border-radius: 7px;
+  font-size: 13.5px; font-weight: 550; color: var(--text-muted);
+}
+.tabs button.active { background: var(--accent-soft); color: var(--accent); }
+
+/* ---- Drop zone ---- */
+.dropzone {
+  border: 1.5px dashed var(--border); border-radius: 12px; background: var(--surface);
+  padding: 22px 16px; text-align: center; margin-bottom: 16px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone .dz-title { font-weight: 600; font-size: 14px; }
+.dropzone .dz-sub { color: var(--text-muted); font-size: 12.5px; margin-top: 4px; }
+.dropzone.busy { pointer-events: none; opacity: 0.7; }
+#fileInput { display: none; }
+
+/* ---- Password prompt ---- */
+.pw-prompt {
+  display: none; margin-bottom: 16px; background: var(--surface);
+  border: 0.5px solid var(--amber); border-radius: 10px; padding: 14px 16px;
+}
+.pw-prompt.show { display: block; }
+.pw-prompt .pw-title { font-weight: 600; margin-bottom: 8px; font-size: 13.5px; }
+.pw-prompt .pw-err { color: var(--red); font-size: 12.5px; margin-bottom: 8px; }
+.pw-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.pw-row input {
+  flex: 1; min-width: 160px; background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: 8px; padding: 7px 10px;
+}
+
+/* ---- Banners & toasts ---- */
+.banner {
+  display: none; margin-bottom: 16px; border-radius: 10px; padding: 11px 14px;
+  font-size: 13px; border: 0.5px solid var(--amber); background: var(--amber-soft);
+  color: var(--text); align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+.banner.show { display: flex; }
+.banner .close-x { background: none; border: none; font-size: 16px; color: var(--text-muted); line-height: 1; }
+#toastWrap { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; width: min(420px, calc(100vw - 32px)); }
+.toast {
+  background: var(--surface); border: 0.5px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: 10px; padding: 11px 14px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  animation: toastIn 0.2s ease;
+}
+.toast.success { border-left-color: var(--green); }
+.toast.error { border-left-color: var(--red); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ---- Cards ---- */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.card {
+  background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
+  padding: 13px 14px; box-shadow: var(--shadow);
+}
+.card .label { font-size: 11.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.card .value { font-size: 18px; font-weight: 650; margin-top: 5px; word-break: break-word; }
+.card .value.pos { color: var(--green); }
+.card .value.neg { color: var(--red); }
+
+/* ---- Panels / charts ---- */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+@media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
+  padding: 14px; box-shadow: var(--shadow); margin-bottom: 12px;
+}
+.grid-2 .panel { margin-bottom: 0; }
+.panel h3 { font-size: 13.5px; font-weight: 650; margin-bottom: 10px; }
+.chart-box { position: relative; height: 250px; }
+.empty-note { color: var(--text-muted); font-size: 13px; padding: 14px 0; text-align: center; }
+
+/* ---- Tables ---- */
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 0.5px solid var(--border); white-space: nowrap; }
+td.wrap { white-space: normal; min-width: 200px; max-width: 420px; }
+th {
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-muted); font-weight: 600; user-select: none; background: var(--surface);
+}
+th.sortable { cursor: pointer; }
+th.sortable:hover { color: var(--text); }
+th .arrow { font-size: 9px; margin-left: 3px; }
+td.num, th.num { text-align: right; }
+td .debit { color: var(--red); }
+td .credit { color: var(--green); }
+tr:hover td { background: var(--surface-2); }
+.tag-chip {
+  display: inline-block; font-size: 10.5px; font-weight: 600; padding: 1px 7px;
+  border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-left: 6px;
+  vertical-align: middle;
+}
+.src-chip { font-size: 11px; color: var(--text-muted); max-width: 140px; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; }
+
+/* ---- Filters ---- */
+.filters {
+  background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 12px; box-shadow: var(--shadow);
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+}
+.f-group { display: flex; flex-direction: column; gap: 4px; }
+.f-group label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.f-group input[type="text"], .f-group input[type="date"], .f-group select {
+  background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 8px;
+  padding: 7px 10px; font-size: 13px; min-width: 0;
+}
+.f-group input[type="text"] { width: 220px; }
+.f-group input[type="date"] { width: 140px; }
+input[type="date"] { color-scheme: light; }
+html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
+
+/* dual range slider */
+.range-wrap { width: 220px; }
+.range-vals { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.dual-slider { position: relative; height: 22px; }
+.dual-slider input[type="range"] {
+  position: absolute; width: 100%; top: 0; left: 0; -webkit-appearance: none; appearance: none;
+  background: none; pointer-events: none; height: 22px; margin: 0;
+}
+.dual-slider .track {
+  position: absolute; top: 9px; left: 0; right: 0; height: 4px; border-radius: 2px;
+  background: var(--border);
+}
+.dual-slider .track-fill { position: absolute; top: 9px; height: 4px; border-radius: 2px; background: var(--accent); }
+.dual-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; pointer-events: auto;
+  width: 15px; height: 15px; border-radius: 50%; background: var(--surface);
+  border: 1.5px solid var(--accent); cursor: pointer; margin-top: 0;
+}
+.dual-slider input[type="range"]::-moz-range-thumb {
+  pointer-events: auto; width: 13px; height: 13px; border-radius: 50%;
+  background: var(--surface); border: 1.5px solid var(--accent); cursor: pointer;
+}
+.dual-slider input[type="range"]::-moz-range-track { background: none; }
+
+/* ---- Pagination ---- */
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 12px; flex-wrap: wrap; }
+.pager .info { color: var(--text-muted); font-size: 12.5px; }
+.pager .pg-btns { display: flex; gap: 6px; }
+
+/* ---- Modal ---- */
+.modal-bg {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 300;
+  align-items: center; justify-content: center; padding: 16px;
+}
+.modal-bg.show { display: flex; }
+.modal {
+  background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px;
+  padding: 20px; width: min(380px, 100%);
+}
+.modal h3 { font-size: 15px; margin-bottom: 8px; }
+.modal p { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; }
+.modal .m-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---- Lists in panels ---- */
+.list-item {
+  display: flex; justify-content: space-between; gap: 10px; padding: 8px 0;
+  border-bottom: 0.5px solid var(--border); font-size: 13px; align-items: baseline;
+}
+.list-item:last-child { border-bottom: none; }
+.list-item .li-main { min-width: 0; }
+.list-item .li-title { font-weight: 550; overflow: hidden; text-overflow: ellipsis; }
+.list-item .li-sub { color: var(--text-muted); font-size: 11.5px; margin-top: 1px; }
+.list-item .li-amt { font-weight: 600; white-space: nowrap; }
+
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+@media (max-width: 480px) {
+  .container { padding: 10px; }
+  .brand h1 { font-size: 16px; }
+  .f-group input[type="text"], .range-wrap { width: 100%; }
+  .f-group { width: 100%; }
+  .f-group.half { width: calc(50% - 6px); }
+  .card .value { font-size: 15.5px; }
+  .tabs button { padding: 7px 14px; }
+  .chart-box { height: 210px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">₹</div>
+      <div>
+        <h1>BankDash</h1>
+        <div class="sub">Client-side bank statement dashboard · data never leaves your browser</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn" id="themeBtn" title="Toggle dark mode">🌙 Dark</button>
+      <button class="btn danger" id="clearBtn">Clear all data</button>
+    </div>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" multiple
+           accept=".pdf,.csv,.xlsx,.xls,.ofx,.qif,application/pdf,text/csv">
+    <div class="dz-title" id="dzTitle">Drop bank statements here, or click to upload</div>
+    <div class="dz-sub">Supports PDF, CSV, Excel (.xlsx / .xls), OFX and QIF · new files merge with existing data</div>
+  </div>
+
+  <div class="pw-prompt" id="pwPrompt">
+    <div class="pw-title" id="pwTitle">This PDF is password-protected</div>
+    <div class="pw-err" id="pwErr" style="display:none">Incorrect password — please try again.</div>
+    <div class="pw-row">
+      <input type="password" id="pwInput" placeholder="Enter PDF password" autocomplete="off">
+      <button class="btn primary" id="pwSubmit">Unlock</button>
+      <button class="btn" id="pwCancel">Cancel</button>
+    </div>
+  </div>
+
+  <div class="banner" id="warnBanner">
+    <span id="warnBannerText"></span>
+    <button class="close-x" onclick="document.getElementById('warnBanner').classList.remove('show')">×</button>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button id="tabOverviewBtn" class="active" data-tab="overview">Overview</button>
+    <button id="tabTxBtn" data-tab="transactions">Transactions</button>
+  </div>
+
+  <!-- ================= OVERVIEW ================= -->
+  <div class="tab-pane active" id="pane-overview">
+    <div class="cards" id="summaryCards"></div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Monthly income vs expenses</h3>
+        <div class="chart-box"><canvas id="chartMonthly"></canvas></div>
+      </div>
+      <div class="panel">
+        <h3>Category-wise spending</h3>
+        <div class="chart-box"><canvas id="chartCategory"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Monthly transaction count</h3>
+        <div class="chart-box"><canvas id="chartCount"></canvas></div>
+      </div>
+      <div class="panel">
+        <h3>Top 10 debit payees</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Payee</th><th class="num">Txns</th><th class="num">Total (₹)</th></tr></thead>
+            <tbody id="topPayeesBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-note" id="topPayeesEmpty">Import a statement to see insights.</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Recurring transactions <span class="src-chip">(payees seen 3+ months in a row)</span></h3>
+        <div id="recurringList"></div>
+        <div class="empty-note" id="recurringEmpty">No recurring payees detected yet.</div>
+      </div>
+      <div class="panel">
+        <h3>Unusual transactions <span class="src-chip">(&gt; 2× monthly average debit)</span></h3>
+        <div id="unusualList"></div>
+        <div class="empty-note" id="unusualEmpty">No unusual transactions flagged.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TRANSACTIONS ================= -->
+  <div class="tab-pane" id="pane-transactions">
+    <div class="filters">
+      <div class="f-group">
+        <label for="searchInput">Search</label>
+        <input type="text" id="searchInput" placeholder="Fuzzy search description, ref, amount…">
+      </div>
+      <div class="f-group half">
+        <label for="dateFrom">From</label>
+        <input type="date" id="dateFrom">
+      </div>
+      <div class="f-group half">
+        <label for="dateTo">To</label>
+        <input type="date" id="dateTo">
+      </div>
+      <div class="f-group">
+        <label>Amount range (₹)</label>
+        <div class="range-wrap">
+          <div class="dual-slider">
+            <div class="track"></div>
+            <div class="track-fill" id="trackFill"></div>
+            <input type="range" id="amtMin" min="0" max="100000" value="0" step="1">
+            <input type="range" id="amtMax" min="0" max="100000" value="100000" step="1">
+          </div>
+          <div class="range-vals"><span id="amtMinLbl">0</span><span id="amtMaxLbl">1,00,000</span></div>
+        </div>
+      </div>
+      <div class="f-group half">
+        <label for="typeFilter">Type</label>
+        <select id="typeFilter">
+          <option value="all">All</option>
+          <option value="credit">Credits only</option>
+          <option value="debit">Debits only</option>
+        </select>
+      </div>
+      <div class="f-group half">
+        <label for="tagFilter">Tag</label>
+        <select id="tagFilter">
+          <option value="all">All tags</option>
+          <option>Salary</option><option>Rent</option><option>EMI</option>
+          <option>Food</option><option>Subscription</option><option>Transfer</option><option>Other</option>
+        </select>
+      </div>
+      <div class="f-group">
+        <label>&nbsp;</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn" id="resetFilters">Reset</button>
+          <button class="btn primary" id="exportCsv">Export CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="table-scroll">
+        <table id="txTable">
+          <thead>
+            <tr>
+              <th class="sortable" data-key="date">Date<span class="arrow"></span></th>
+              <th class="sortable" data-key="narration">Description<span class="arrow"></span></th>
+              <th class="sortable" data-key="ref_no">Ref No<span class="arrow"></span></th>
+              <th class="sortable num" data-key="withdrawal">Debit (₹)<span class="arrow"></span></th>
+              <th class="sortable num" data-key="deposit">Credit (₹)<span class="arrow"></span></th>
+              <th class="sortable num" data-key="balance">Balance (₹)<span class="arrow"></span></th>
+              <th class="sortable" data-key="source_file">Source<span class="arrow"></span></th>
+            </tr>
+          </thead>
+          <tbody id="txBody"></tbody>
+        </table>
+      </div>
+      <div class="empty-note" id="txEmpty">No transactions. Import a statement above to get started.</div>
+      <div class="pager" id="pager" style="display:none">
+        <span class="info" id="pageInfo"></span>
+        <div class="pg-btns">
+          <button class="btn" id="prevPage">← Prev</button>
+          <button class="btn" id="nextPage">Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toastWrap"></div>
+
+<div class="modal-bg" id="clearModal">
+  <div class="modal">
+    <h3>Clear all data?</h3>
+    <p>This permanently removes all imported transactions from this browser. This cannot be undone.</p>
+    <div class="m-actions">
+      <button class="btn" id="clearCancel">Cancel</button>
+      <button class="btn danger" id="clearConfirm">Yes, clear everything</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   BankDash — fully client-side bank statement dashboard
+   Storage keys: bankdash_transactions, bankdash_meta
+===================================================================== */
+
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+const LS_TX = "bankdash_transactions";
+const LS_META = "bankdash_meta";
+const PAGE_SIZE = 50;
+const $ = (id) => document.getElementById(id);
+
+let transactions = [];           // unified schema records
+let meta = { sources: [], theme: null };
+let sortState = { key: "date", dir: -1 };
+let currentPage = 1;
+let filteredCache = [];
+let charts = {};
+
+/* ============================ utils ============================ */
+
+function parseAmount(s) {
+  if (s == null || s === "") return null;
+  if (typeof s === "number") return isFinite(s) ? s : null;
+  let str = String(s).replace(/[₹\s]/g, "").replace(/,/g, "");
+  let neg = false;
+  if (/^\(.*\)$/.test(str)) { neg = true; str = str.slice(1, -1); }
+  if (/dr\.?$/i.test(str)) { str = str.replace(/dr\.?$/i, ""); }
+  if (/cr\.?$/i.test(str)) { str = str.replace(/cr\.?$/i, ""); }
+  const v = parseFloat(str);
+  if (!isFinite(v)) return null;
+  return neg ? -v : v;
+}
+
+const MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+
+function parseDate(input) {
+  if (input == null || input === "") return null;
+  // Excel serial date
+  if (typeof input === "number") {
+    if (input > 20000 && input < 80000) {
+      const d = new Date(Date.UTC(1899, 11, 30) + input * 86400000);
+      return d.toISOString().slice(0, 10);
+    }
+    return null;
+  }
+  if (input instanceof Date && !isNaN(input)) return input.toISOString().slice(0, 10);
+  const s = String(input).trim();
+  let m;
+  // ISO / YYYY-MM-DD or YYYY/MM/DD
+  if ((m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/))) return mkDate(+m[1], +m[2], +m[3]);
+  // OFX YYYYMMDD
+  if ((m = s.match(/^(\d{4})(\d{2})(\d{2})\d*/)) && s.length >= 8 && !/[\/\-.]/.test(s.slice(0, 8)))
+    return mkDate(+m[1], +m[2], +m[3]);
+  // DD/MM/YYYY (or MM/DD when first part can't be a day)
+  if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/))) {
+    let d = +m[1], mo = +m[2], y = +m[3];
+    if (mo > 12 && d <= 12) { const t = d; d = mo; mo = t; }   // was MM/DD
+    if (y < 100) y += y < 70 ? 2000 : 1900;
+    return mkDate(y, mo, d);
+  }
+  // QIF style MM/DD'YY
+  if ((m = s.match(/^(\d{1,2})\/(\d{1,2})'(\d{2})$/))) return mkDate(2000 + +m[3], +m[1], +m[2]);
+  // DD MMM YYYY / DD-MMM-YY
+  if ((m = s.match(/^(\d{1,2})[ \-\/]([A-Za-z]{3,9})[ \-\/,]+(\d{2,4})$/))) {
+    const mo = MONTHS[m[2].slice(0, 3).toLowerCase()];
+    let y = +m[3]; if (y < 100) y += y < 70 ? 2000 : 1900;
+    if (mo) return mkDate(y, mo, +m[1]);
+  }
+  return null;
+}
+function mkDate(y, mo, d) {
+  if (y < 1950 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+function fmtINR(v, dash) {
+  if (v == null || isNaN(v)) return dash !== undefined ? dash : "—";
+  return v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtShort(v) {
+  const a = Math.abs(v);
+  if (a >= 1e7) return (v / 1e7).toFixed(1).replace(/\.0$/, "") + "Cr";
+  if (a >= 1e5) return (v / 1e5).toFixed(1).replace(/\.0$/, "") + "L";
+  if (a >= 1e3) return (v / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
+  return String(Math.round(v));
+}
+function fmtDateDisp(iso) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function debounce(fn, ms) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+function monthKey(iso) { return iso ? iso.slice(0, 7) : null; }
+function monthLabel(key) {
+  const [y, m] = key.split("-");
+  return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m - 1] + " " + y.slice(2);
+}
+
+/* ============================ tagging ============================ */
+
+const TAG_RULES = [
+  ["Salary", ["salary", "payroll", "wages", "stipend", "sal cr"]],
+  ["Rent", ["rent", "lease", "landlord"]],
+  ["EMI", ["emi", " loan", "loan ", "instalment", "installment", "repayment", "bajajfin", "homeloan"]],
+  ["Food", ["swiggy", "zomato", "restaurant", "food", "cafe", "dominos", "mcdonald", "kfc", "pizza",
+            "starbucks", "dunkin", "eatfit", "blinkit", "zepto", "instamart", "bigbasket", "grocery", "grofers"]],
+  ["Subscription", ["netflix", "spotify", "hotstar", "primevideo", "prime video", "amazonprime",
+            "youtube", "subscription", "jiocinema", "sonyliv", "adobe", "microsoft 365", "google play",
+            "apple.com", "applemedia", "icloud", "membership"]],
+  ["Transfer", ["neft", "imps", "rtgs", "transfer", " trf", "trf ", "self ", "own account", "tpt", "a2a", "p2a"]],
+];
+function detectTag(narration) {
+  const n = " " + String(narration || "").toLowerCase() + " ";
+  for (const [tag, kws] of TAG_RULES)
+    for (const kw of kws) if (n.includes(kw)) return tag;
+  return "Other";
+}
+
+/* ============================ payee normalization ============================ */
+
+const PAYEE_STOP = new Set(["upi", "neft", "imps", "rtgs", "pos", "atm", "ach", "bil", "pay", "payment",
+  "paytm", "tpt", "inf", "ft", "cr", "dr", "ref", "txn", "mmt", "p2a", "p2m", "nwd", "vps", "eaw",
+  "to", "from", "by", "fund", "transfer", "dc", "intl", "vin", "me", "in", "ltd", "pvt", "india", "the"]);
+
+function normalizePayee(narration) {
+  const raw = String(narration || "");
+  const parts = raw.split(/[\/\-:|]+/);
+  for (let p of parts) {
+    p = p.trim();
+    if (!p) continue;
+    if (p.includes("@")) p = p.split("@")[0];           // VPA handle
+    const cleaned = p.replace(/\d{5,}/g, "").trim();    // strip long numbers
+    const letters = (cleaned.match(/[A-Za-z]/g) || []).length;
+    if (letters >= 3 && !PAYEE_STOP.has(cleaned.toLowerCase()))
+      return cleaned.replace(/\s+/g, " ").slice(0, 32).toUpperCase();
+  }
+  const fallback = raw.replace(/\d{5,}/g, "").trim().slice(0, 32);
+  return (fallback || "UNKNOWN").toUpperCase();
+}
+
+/* ============================ storage ============================ */
+
+function loadState() {
+  try {
+    transactions = JSON.parse(localStorage.getItem(LS_TX) || "[]");
+    if (!Array.isArray(transactions)) transactions = [];
+  } catch { transactions = []; }
+  try {
+    meta = Object.assign({ sources: [], theme: null }, JSON.parse(localStorage.getItem(LS_META) || "{}"));
+  } catch { meta = { sources: [], theme: null }; }
+}
+function saveState() {
+  try {
+    localStorage.setItem(LS_TX, JSON.stringify(transactions));
+    localStorage.setItem(LS_META, JSON.stringify(meta));
+  } catch (e) {
+    toast("Could not save to localStorage (storage may be full).", "error");
+  }
+}
+
+/* ============================ dedupe & merge ============================ */
+
+function txKey(t) {
+  const ref = (t.ref_no || "").replace(/\s+/g, "");
+  if (ref && ref.length >= 4 && !/^0+$/.test(ref)) return "r:" + ref;
+  const amt = (t.withdrawal || 0) + "|" + (t.deposit || 0);
+  const narr = String(t.narration || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 60);
+  return "k:" + t.date + "|" + amt + "|" + narr;
+}
+
+function mergeTransactions(incoming, sourceName) {
+  const existing = new Set(transactions.map(txKey));
+  let added = 0, dupes = 0;
+  for (const t of incoming) {
+    if (!t.date) continue;
+    t.source_file = sourceName;
+    t.tag = detectTag(t.narration);
+    const k = txKey(t);
+    if (existing.has(k)) { dupes++; continue; }
+    existing.add(k);
+    transactions.push(t);
+    added++;
+  }
+  if (added > 0) {
+    transactions.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    const src = meta.sources.find((s) => s.name === sourceName);
+    if (src) { src.count += added; src.importedAt = new Date().toISOString(); }
+    else meta.sources.push({ name: sourceName, count: added, importedAt: new Date().toISOString() });
+  }
+  saveState();
+  return { added, dupes };
+}
+
+/* ============================ file import ============================ */
+
+const dropzone = $("dropzone"), fileInput = $("fileInput");
+
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+dropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.classList.remove("dragover");
+  if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) handleFiles(fileInput.files);
+  fileInput.value = "";
+});
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList);
+  dropzone.classList.add("busy");
+  const dzTitle = $("dzTitle"), origTitle = dzTitle.textContent;
+  for (const file of files) {
+    dzTitle.textContent = `Parsing ${file.name}…`;
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    try {
+      let txns = [];
+      if (ext === "pdf") txns = await importPDF(file);
+      else if (ext === "csv" || file.type === "text/csv") txns = importCSV(await file.text());
+      else if (ext === "xlsx" || ext === "xls") txns = importExcel(await file.arrayBuffer());
+      else if (ext === "ofx") txns = importOFX(await file.text());
+      else if (ext === "qif") txns = importQIF(await file.text());
+      else { toast(`Unsupported file type: ${file.name}`, "error"); continue; }
+
+      if (txns === null) continue; // cancelled (e.g. password prompt)
+      if (!txns.length) {
+        toast(`No transactions found in ${file.name}.`, "error");
+        continue;
+      }
+      const { added, dupes } = mergeTransactions(txns, file.name);
+      toast(`${file.name}: ${added} new transaction${added === 1 ? "" : "s"} added, ${dupes} duplicate${dupes === 1 ? "" : "s"} skipped`, "success");
+    } catch (err) {
+      console.error("Import failed", file.name, err);
+      toast(`Failed to parse ${file.name}: ${err.message || err}`, "error");
+    }
+  }
+  dzTitle.textContent = origTitle;
+  dropzone.classList.remove("busy");
+  refreshAll();
+}
+
+/* ---------- CSV / Excel: tabular import via header mapping ---------- */
+
+function headerScore(cells) {
+  const joined = cells.map((c) => String(c).toLowerCase()).join(" ");
+  let score = 0;
+  if (/date/.test(joined)) score += 2;
+  if (/narration|description|particular|details|remarks/.test(joined)) score += 2;
+  if (/withdraw|debit|deposit|credit|amount/.test(joined)) score += 2;
+  if (/balance/.test(joined)) score += 1;
+  return score;
+}
+
+function mapColumns(headerCells) {
+  const map = {};
+  headerCells.forEach((cRaw, i) => {
+    const c = String(cRaw).toLowerCase().trim();
+    if (!c) return;
+    if (map.date === undefined && /(txn|tran|transaction|value)?\s*date/.test(c) && !/value\s*date/.test(c)) map.date = i;
+    else if (map.valueDate === undefined && /value\s*(dt|date)/.test(c)) map.valueDate = i;
+    else if (map.narration === undefined && /narration|description|particular|details|remarks|transaction\s*remarks/.test(c)) map.narration = i;
+    else if (map.ref === undefined && /chq|cheque|ref|utr/.test(c)) map.ref = i;
+    else if (map.withdrawal === undefined && /withdraw|debit|\bdr\b/.test(c) && !/credit/.test(c)) map.withdrawal = i;
+    else if (map.deposit === undefined && /deposit|credit|\bcr\b/.test(c) && !/debit/.test(c)) map.deposit = i;
+    else if (map.balance === undefined && /balance/.test(c)) map.balance = i;
+    else if (map.amount === undefined && /^amount|transaction\s*amount|amt/.test(c)) map.amount = i;
+    else if (map.type === undefined && /^(type|dr\/cr|cr\/dr)/.test(c)) map.type = i;
+  });
+  if (map.date === undefined && map.valueDate !== undefined) map.date = map.valueDate;
+  return map;
+}
+
+function rowsToTxns(rows) {
+  // locate the header row (some bank CSVs have preamble lines)
+  let headerIdx = -1, best = 0;
+  for (let i = 0; i < Math.min(rows.length, 30); i++) {
+    const s = headerScore(rows[i]);
+    if (s > best && s >= 4) { best = s; headerIdx = i; }
+  }
+  if (headerIdx === -1) throw new Error("could not find a header row with date/amount columns");
+  const map = mapColumns(rows[headerIdx]);
+  if (map.date === undefined) throw new Error("no date column detected");
+
+  const out = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || !r.length) continue;
+    const date = parseDate(r[map.date]);
+    if (!date) continue;
+    let withdrawal = map.withdrawal !== undefined ? parseAmount(r[map.withdrawal]) : null;
+    let deposit = map.deposit !== undefined ? parseAmount(r[map.deposit]) : null;
+    if (withdrawal === null && deposit === null && map.amount !== undefined) {
+      const amt = parseAmount(r[map.amount]);
+      if (amt !== null) {
+        const typ = map.type !== undefined ? String(r[map.type]).toLowerCase() : "";
+        if (/dr|debit|withdraw/.test(typ) || amt < 0) withdrawal = Math.abs(amt);
+        else deposit = amt;
+      }
+    }
+    if (withdrawal === 0) withdrawal = null;
+    if (deposit === 0) deposit = null;
+    if (withdrawal === null && deposit === null) continue;
+    out.push({
+      date,
+      narration: String(map.narration !== undefined ? r[map.narration] : "").trim(),
+      ref_no: String(map.ref !== undefined ? (r[map.ref] ?? "") : "").trim(),
+      withdrawal: withdrawal !== null ? Math.abs(withdrawal) : null,
+      deposit: deposit !== null ? Math.abs(deposit) : null,
+      balance: map.balance !== undefined ? parseAmount(r[map.balance]) : null,
+    });
+  }
+  return out;
+}
+
+function importCSV(text) {
+  const res = Papa.parse(text.trim(), { skipEmptyLines: true });
+  return rowsToTxns(res.data);
+}
+
+function importExcel(buf) {
+  const wb = XLSX.read(buf, { type: "array" });
+  let all = [];
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: "" });
+    try { all = all.concat(rowsToTxns(rows)); } catch { /* sheet without txn table */ }
+  }
+  if (!all.length) throw new Error("no transaction table found in any sheet");
+  return all;
+}
+
+/* ---------- OFX ---------- */
+
+function importOFX(text) {
+  const out = [];
+  const blocks = text.match(/<STMTTRN>[\s\S]*?<\/STMTTRN>/gi) || [];
+  const field = (b, tag) => {
+    const m = b.match(new RegExp("<" + tag + ">([^<\\r\\n]*)", "i"));
+    return m ? m[1].trim() : "";
+  };
+  for (const b of blocks) {
+    const date = parseDate(field(b, "DTPOSTED"));
+    const amt = parseAmount(field(b, "TRNAMT"));
+    if (!date || amt === null) continue;
+    const name = [field(b, "NAME"), field(b, "MEMO")].filter(Boolean).join(" - ");
+    out.push({
+      date,
+      narration: name,
+      ref_no: field(b, "FITID") || field(b, "CHECKNUM"),
+      withdrawal: amt < 0 ? Math.abs(amt) : null,
+      deposit: amt > 0 ? amt : null,
+      balance: null,
+    });
+  }
+  return out;
+}
+
+/* ---------- QIF ---------- */
+
+function importQIF(text) {
+  const out = [];
+  let cur = {};
+  for (const lineRaw of text.split(/\r?\n/)) {
+    const line = lineRaw.trim();
+    if (!line) continue;
+    const code = line[0], val = line.slice(1).trim();
+    if (code === "!") continue;
+    if (code === "^") {
+      const date = parseDate(cur.D);
+      const amt = parseAmount(cur.T !== undefined ? cur.T : cur.U);
+      if (date && amt !== null) {
+        out.push({
+          date,
+          narration: [cur.P, cur.M].filter(Boolean).join(" - "),
+          ref_no: cur.N || "",
+          withdrawal: amt < 0 ? Math.abs(amt) : null,
+          deposit: amt > 0 ? amt : null,
+          balance: null,
+        });
+      }
+      cur = {};
+    } else cur[code] = val;
+  }
+  return out;
+}
+
+/* ---------- PDF ---------- */
+
+function promptPassword(fileName, wasWrong) {
+  return new Promise((resolve) => {
+    const box = $("pwPrompt"), input = $("pwInput"), err = $("pwErr");
+    $("pwTitle").textContent = `"${fileName}" is password-protected — enter the password to parse it`;
+    err.style.display = wasWrong ? "block" : "none";
+    box.classList.add("show");
+    input.value = "";
+    input.focus();
+    const done = (val) => {
+      box.classList.remove("show");
+      $("pwSubmit").onclick = $("pwCancel").onclick = input.onkeydown = null;
+      resolve(val);
+    };
+    $("pwSubmit").onclick = () => done(input.value);
+    $("pwCancel").onclick = () => done(null);
+    input.onkeydown = (e) => { if (e.key === "Enter") done(input.value); };
+  });
+}
+
+async function openPdf(buf, fileName) {
+  let password;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      // slice() because PDF.js transfers the buffer to its worker
+      return await pdfjsLib.getDocument({ data: buf.slice(0), password }).promise;
+    } catch (e) {
+      if (e && e.name === "PasswordException") {
+        password = await promptPassword(fileName, password !== undefined);
+        if (password === null) return null; // user cancelled
+      } else throw e;
+    }
+  }
+  return null;
+}
+
+async function importPDF(file) {
+  if (!window.pdfjsLib) throw new Error("PDF.js failed to load from CDN");
+  const buf = await file.arrayBuffer();
+  const pdf = await openPdf(buf, file.name);
+  if (!pdf) return null; // cancelled
+
+  const pageLines = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    // group text items into visual lines by Y coordinate
+    const rows = new Map();
+    for (const it of content.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const y = Math.round(it.transform[5] / 2.5) * 2.5;
+      if (!rows.has(y)) rows.set(y, []);
+      rows.get(y).push({ x: it.transform[4], str: it.str });
+    }
+    const lines = [...rows.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([, items]) => items.sort((a, b) => a.x - b.x).map((i) => i.str).join(" ").replace(/\s+/g, " ").trim());
+    pageLines.push(...lines);
+  }
+  try { pdf.destroy(); } catch {}
+  return parsePdfLines(pageLines, file.name);
+}
+
+const DATE_LINE_RE = /^(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})\b[ ,]*(.*)$/;
+const JUNK_LINE_RE = /page \d+ of|statement of account|statement period|generated on|account branch|registered office|this is a system generated|nomination|cheques are subject|^\* /i;
+
+function detectAmountOrder(lines) {
+  // returns ["withdrawal","deposit"] or ["deposit","withdrawal"] based on header row keywords
+  for (const line of lines.slice(0, 120)) {
+    const l = line.toLowerCase();
+    const isHeader = /date/.test(l) && /balance/.test(l) &&
+      /(withdrawal|debit|deposit|credit)/.test(l);
+    if (!isHeader) continue;
+    const wIdx = Math.min(...["withdrawal", "debit", "dr amount"].map((k) => { const i = l.indexOf(k); return i === -1 ? 1e9 : i; }));
+    const dIdx = Math.min(...["deposit", "credit", "cr amount"].map((k) => { const i = l.indexOf(k); return i === -1 ? 1e9 : i; }));
+    if (wIdx === 1e9 && dIdx === 1e9) continue;
+    return dIdx < wIdx ? ["deposit", "withdrawal"] : ["withdrawal", "deposit"];
+  }
+  return ["withdrawal", "deposit"]; // HDFC / SBI / Axis / Kotak default; ICICI is deposit-first
+}
+
+function extractTrailingAmounts(s) {
+  const amounts = [];
+  let rest = s.trimEnd();
+  while (amounts.length < 3) {
+    const m = rest.match(/(?:^|\s)(-?\(?\d[\d,]*\.\d{1,2}\)?)\s*(?:\(?(cr|dr)\.?\)?)?$/i);
+    if (!m) break;
+    amounts.unshift({ v: parseAmount(m[1]), flag: m[2] ? m[2].toLowerCase() : null });
+    rest = rest.slice(0, rest.length - m[0].length).trimEnd();
+  }
+  return { amounts, narration: rest };
+}
+
+function parsePdfLines(lines, fileName) {
+  const order = detectAmountOrder(lines);
+  const out = [];
+  let candidates = 0, parsed = 0;
+  let prevBalance = null;
+
+  for (const line of lines) {
+    if (JUNK_LINE_RE.test(line)) continue;
+    const dm = line.match(DATE_LINE_RE);
+    if (!dm) {
+      // possible narration continuation for the previous transaction
+      if (out.length && line.length > 1 && line.length < 70 &&
+          !/[\d,]+\.\d{2}/.test(line) && /[A-Za-z]{3}/.test(line) &&
+          !/total|balance|opening|closing/i.test(line)) {
+        out[out.length - 1].narration = (out[out.length - 1].narration + " " + line).trim().slice(0, 200);
+      }
+      continue;
+    }
+    const date = parseDate(dm[1]);
+    if (!date) continue;
+    if (/opening balance|brought forward|b\/f\b|balance forward/i.test(line)) {
+      const { amounts } = extractTrailingAmounts(dm[2]);
+      if (amounts.length) prevBalance = amounts[amounts.length - 1].v;
+      continue;
+    }
+    candidates++;
+
+    let { amounts, narration } = extractTrailingAmounts(dm[2]);
+    // a second date in the row is usually the value date — drop it from narration end
+    narration = narration.replace(/\s+\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\s*$/, "").trim();
+    if (amounts.length < 2) continue; // need at least amount + balance
+
+    let withdrawal = null, deposit = null, balance = null;
+    const balTok = amounts[amounts.length - 1];
+    balance = balTok.flag === "dr" ? -Math.abs(balTok.v) : balTok.v;
+    const mids = amounts.slice(0, -1);
+
+    if (mids.length === 2) {
+      const a = mids[0].v, b = mids[1].v;
+      if (order[0] === "deposit") { deposit = a || null; withdrawal = b || null; }
+      else { withdrawal = a || null; deposit = b || null; }
+    } else { // single amount + balance — resolve direction
+      const t = mids[0];
+      const amt = Math.abs(t.v);
+      if (t.flag === "dr") withdrawal = amt;
+      else if (t.flag === "cr") deposit = amt;
+      else if (prevBalance !== null && balance !== null) {
+        if (balance < prevBalance) withdrawal = amt; else deposit = amt;
+      } else if (t.v < 0) withdrawal = amt;
+      else deposit = amt;
+    }
+    prevBalance = balance;
+    if (withdrawal === null && deposit === null) continue;
+
+    const refMatch = narration.match(/\b([A-Z0-9]*\d{6,18})\b(?!.*\b[A-Z0-9]*\d{6,18}\b)/);
+    out.push({
+      date,
+      narration: narration.slice(0, 200),
+      ref_no: refMatch ? refMatch[1] : "",
+      withdrawal, deposit, balance,
+    });
+    parsed++;
+  }
+
+  if (candidates > 0 && parsed / candidates < 0.5) {
+    showWarning(`Could not fully parse "${fileName}" — ${parsed} of ${candidates} rows matched. You can manually review unmatched rows in the original PDF.`);
+  }
+  return out;
+}
+
+/* ============================ UI: toast / banner / theme / tabs ============================ */
+
+function toast(msg, kind) {
+  const el = document.createElement("div");
+  el.className = "toast" + (kind ? " " + kind : "");
+  el.textContent = msg;
+  $("toastWrap").appendChild(el);
+  setTimeout(() => { el.style.opacity = "0"; el.style.transition = "opacity 0.3s"; }, 5200);
+  setTimeout(() => el.remove(), 5600);
+}
+function showWarning(msg) {
+  $("warnBannerText").textContent = msg;
+  $("warnBanner").classList.add("show");
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $("themeBtn").textContent = theme === "dark" ? "☀️ Light" : "🌙 Dark";
+  meta.theme = theme;
+  saveState();
+  renderDashboard(); // re-render charts with new palette
+}
+$("themeBtn").addEventListener("click", () =>
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+
+document.querySelectorAll(".tabs button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".tab-pane").forEach((p) =>
+      p.classList.toggle("active", p.id === "pane-" + btn.dataset.tab));
+  });
+});
+
+/* ---- clear data ---- */
+$("clearBtn").addEventListener("click", () => $("clearModal").classList.add("show"));
+$("clearCancel").addEventListener("click", () => $("clearModal").classList.remove("show"));
+$("clearConfirm").addEventListener("click", () => {
+  transactions = [];
+  meta.sources = [];
+  localStorage.removeItem(LS_TX);
+  saveState();
+  $("clearModal").classList.remove("show");
+  $("warnBanner").classList.remove("show");
+  refreshAll();
+  toast("All data cleared.", "success");
+});
+$("clearModal").addEventListener("click", (e) => {
+  if (e.target === $("clearModal")) $("clearModal").classList.remove("show");
+});
+
+/* ============================ filters & table ============================ */
+
+const filterState = { search: "", from: "", to: "", amtMin: 0, amtMax: Infinity, type: "all", tag: "all" };
+let sliderMax = 100000;
+
+function subsequenceMatch(needle, hay) {
+  let i = 0;
+  for (let j = 0; j < hay.length && i < needle.length; j++)
+    if (hay[j] === needle[i]) i++;
+  return i === needle.length;
+}
+function fuzzyHit(query, t) {
+  const hay = (
+    (t.narration || "") + " " + (t.ref_no || "") + " " +
+    (t.withdrawal != null ? t.withdrawal.toFixed(2) : "") + " " +
+    (t.deposit != null ? t.deposit.toFixed(2) : "") + " " +
+    fmtDateDisp(t.date) + " " + (t.tag || "")
+  ).toLowerCase();
+  return query.split(/\s+/).every((tok) =>
+    !tok || hay.includes(tok) || (tok.length >= 3 && subsequenceMatch(tok, hay)));
+}
+
+function txAmount(t) { return t.withdrawal != null ? t.withdrawal : (t.deposit != null ? t.deposit : 0); }
+
+function applyFilters() {
+  const q = filterState.search.trim().toLowerCase();
+  filteredCache = transactions.filter((t) => {
+    if (filterState.from && t.date < filterState.from) return false;
+    if (filterState.to && t.date > filterState.to) return false;
+    if (filterState.type === "credit" && t.deposit == null) return false;
+    if (filterState.type === "debit" && t.withdrawal == null) return false;
+    if (filterState.tag !== "all" && t.tag !== filterState.tag) return false;
+    const amt = txAmount(t);
+    if (amt < filterState.amtMin || amt > filterState.amtMax) return false;
+    if (q && !fuzzyHit(q, t)) return false;
+    return true;
+  });
+  sortFiltered();
+}
+
+function sortFiltered() {
+  const { key, dir } = sortState;
+  filteredCache.sort((a, b) => {
+    let va = a[key], vb = b[key];
+    if (key === "withdrawal" || key === "deposit" || key === "balance") {
+      va = va == null ? -Infinity : va; vb = vb == null ? -Infinity : vb;
+    } else { va = va == null ? "" : String(va).toLowerCase(); vb = vb == null ? "" : String(vb).toLowerCase(); }
+    if (va < vb) return -dir;
+    if (va > vb) return dir;
+    return 0;
+  });
+}
+
+function renderTable() {
+  const body = $("txBody");
+  const total = filteredCache.length;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (currentPage > pages) currentPage = pages;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const rows = filteredCache.slice(start, start + PAGE_SIZE);
+
+  body.innerHTML = rows.map((t) => `
+    <tr>
+      <td>${fmtDateDisp(t.date)}</td>
+      <td class="wrap">${escapeHtml(t.narration) || "—"}${t.tag && t.tag !== "Other" ? `<span class="tag-chip">${t.tag}</span>` : ""}</td>
+      <td>${escapeHtml(t.ref_no) || "—"}</td>
+      <td class="num">${t.withdrawal != null ? `<span class="debit">${fmtINR(t.withdrawal)}</span>` : ""}</td>
+      <td class="num">${t.deposit != null ? `<span class="credit">${fmtINR(t.deposit)}</span>` : ""}</td>
+      <td class="num">${fmtINR(t.balance, "")}</td>
+      <td><span class="src-chip" title="${escapeHtml(t.source_file)}">${escapeHtml(t.source_file)}</span></td>
+    </tr>`).join("");
+
+  $("txEmpty").style.display = total ? "none" : "block";
+  $("pager").style.display = total > 0 ? "flex" : "none";
+  $("pageInfo").textContent = total
+    ? `Showing ${start + 1}–${Math.min(start + PAGE_SIZE, total)} of ${total.toLocaleString("en-IN")} transactions`
+    : "";
+  $("prevPage").disabled = currentPage <= 1;
+  $("nextPage").disabled = currentPage >= pages;
+
+  document.querySelectorAll("#txTable th.sortable").forEach((th) => {
+    th.querySelector(".arrow").textContent =
+      th.dataset.key === sortState.key ? (sortState.dir === 1 ? "▲" : "▼") : "";
+  });
+}
+
+function refreshTable() { applyFilters(); renderTable(); }
+
+document.querySelectorAll("#txTable th.sortable").forEach((th) => {
+  th.addEventListener("click", () => {
+    if (sortState.key === th.dataset.key) sortState.dir *= -1;
+    else { sortState.key = th.dataset.key; sortState.dir = 1; }
+    sortFiltered();
+    currentPage = 1;
+    renderTable();
+  });
+});
+
+$("searchInput").addEventListener("input", debounce((e) => {
+  filterState.search = e.target.value; currentPage = 1; refreshTable();
+}, 150));
+$("dateFrom").addEventListener("change", (e) => { filterState.from = e.target.value; currentPage = 1; refreshTable(); });
+$("dateTo").addEventListener("change", (e) => { filterState.to = e.target.value; currentPage = 1; refreshTable(); });
+$("typeFilter").addEventListener("change", (e) => { filterState.type = e.target.value; currentPage = 1; refreshTable(); });
+$("tagFilter").addEventListener("change", (e) => { filterState.tag = e.target.value; currentPage = 1; refreshTable(); });
+$("prevPage").addEventListener("click", () => { if (currentPage > 1) { currentPage--; renderTable(); } });
+$("nextPage").addEventListener("click", () => { currentPage++; renderTable(); });
+
+/* ---- amount dual slider ---- */
+const amtMinEl = $("amtMin"), amtMaxEl = $("amtMax");
+function updateSliderUI() {
+  let lo = +amtMinEl.value, hi = +amtMaxEl.value;
+  if (lo > hi) [lo, hi] = [hi, lo];
+  filterState.amtMin = lo;
+  filterState.amtMax = hi >= sliderMax ? Infinity : hi;
+  $("amtMinLbl").textContent = lo.toLocaleString("en-IN");
+  $("amtMaxLbl").textContent = (hi >= sliderMax ? hi.toLocaleString("en-IN") + "+" : hi.toLocaleString("en-IN"));
+  const fill = $("trackFill");
+  const pctLo = sliderMax ? (lo / sliderMax) * 100 : 0;
+  const pctHi = sliderMax ? (hi / sliderMax) * 100 : 100;
+  fill.style.left = pctLo + "%";
+  fill.style.width = Math.max(0, pctHi - pctLo) + "%";
+}
+function setSliderBounds() {
+  const maxAmt = transactions.reduce((m, t) => Math.max(m, txAmount(t)), 0);
+  sliderMax = Math.max(1000, Math.ceil(maxAmt / 1000) * 1000);
+  amtMinEl.max = amtMaxEl.max = sliderMax;
+  amtMinEl.value = 0;
+  amtMaxEl.value = sliderMax;
+  updateSliderUI();
+}
+[amtMinEl, amtMaxEl].forEach((el) => el.addEventListener("input", () => {
+  updateSliderUI(); currentPage = 1; refreshTable();
+}));
+
+$("resetFilters").addEventListener("click", () => {
+  filterState.search = ""; filterState.from = ""; filterState.to = "";
+  filterState.type = "all"; filterState.tag = "all";
+  $("searchInput").value = ""; $("dateFrom").value = ""; $("dateTo").value = "";
+  $("typeFilter").value = "all"; $("tagFilter").value = "all";
+  setSliderBounds();
+  currentPage = 1;
+  refreshTable();
+});
+
+/* ---- CSV export of filtered view ---- */
+$("exportCsv").addEventListener("click", () => {
+  if (!filteredCache.length) { toast("Nothing to export — no rows match the current filters.", "error"); return; }
+  const esc = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = ["Date,Description,Ref No,Debit,Credit,Balance,Tag,Source"];
+  for (const t of filteredCache) {
+    lines.push([fmtDateDisp(t.date), esc(t.narration), esc(t.ref_no),
+      t.withdrawal ?? "", t.deposit ?? "", t.balance ?? "", t.tag, esc(t.source_file)].join(","));
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bankdash_export_" + new Date().toISOString().slice(0, 10) + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`Exported ${filteredCache.length} rows to CSV.`, "success");
+});
+
+/* ============================ overview dashboard ============================ */
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function renderCards() {
+  const wrap = $("summaryCards");
+  if (!transactions.length) {
+    wrap.innerHTML = `<div class="card" style="grid-column:1/-1"><div class="label">Get started</div>
+      <div class="value" style="font-size:14px;font-weight:450;color:var(--text-muted)">
+      Import a bank statement above — totals, charts and insights will appear here.</div></div>`;
+    return;
+  }
+  const sorted = transactions; // already sorted by date
+  const first = sorted[0], last = sorted[sorted.length - 1];
+  let opening = null;
+  if (first.balance != null)
+    opening = first.balance + (first.withdrawal || 0) - (first.deposit || 0);
+  const closing = [...sorted].reverse().find((t) => t.balance != null);
+  const credits = sorted.reduce((s, t) => s + (t.deposit || 0), 0);
+  const debits = sorted.reduce((s, t) => s + (t.withdrawal || 0), 0);
+  const net = credits - debits;
+  const cards = [
+    ["Opening balance", opening != null ? "₹" + fmtINR(opening) : "—", ""],
+    ["Closing balance", closing ? "₹" + fmtINR(closing.balance) : "—", ""],
+    ["Total credits", "₹" + fmtINR(credits), "pos"],
+    ["Total debits", "₹" + fmtINR(debits), "neg"],
+    ["Net flow", (net >= 0 ? "+₹" : "−₹") + fmtINR(Math.abs(net)), net >= 0 ? "pos" : "neg"],
+    ["Transactions", sorted.length.toLocaleString("en-IN"), ""],
+  ];
+  wrap.innerHTML = cards.map(([label, value, cls]) =>
+    `<div class="card"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`).join("");
+}
+
+function chartTheme() {
+  return { text: cssVar("--text-muted"), grid: cssVar("--chart-grid") };
+}
+function destroyChart(key) { if (charts[key]) { charts[key].destroy(); charts[key] = null; } }
+
+function renderCharts() {
+  const months = {};
+  for (const t of transactions) {
+    const k = monthKey(t.date);
+    if (!k) continue;
+    if (!months[k]) months[k] = { credit: 0, debit: 0, count: 0 };
+    months[k].credit += t.deposit || 0;
+    months[k].debit += t.withdrawal || 0;
+    months[k].count++;
+  }
+  const keys = Object.keys(months).sort();
+  const labels = keys.map(monthLabel);
+  const th = chartTheme();
+  const common = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: th.text, boxWidth: 12, font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: th.text, font: { size: 10.5 } }, grid: { color: th.grid } },
+      y: { ticks: { color: th.text, font: { size: 10.5 }, callback: (v) => fmtShort(v) }, grid: { color: th.grid } },
+    },
+  };
+
+  destroyChart("monthly");
+  charts.monthly = new Chart($("chartMonthly"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        { label: "Income", data: keys.map((k) => months[k].credit), backgroundColor: cssVar("--green"), borderRadius: 3 },
+        { label: "Expenses", data: keys.map((k) => months[k].debit), backgroundColor: cssVar("--red"), borderRadius: 3 },
+      ],
+    },
+    options: common,
+  });
+
+  destroyChart("count");
+  charts.count = new Chart($("chartCount"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{ label: "Transactions", data: keys.map((k) => months[k].count), backgroundColor: cssVar("--accent"), borderRadius: 3 }],
+    },
+    options: { ...common, plugins: { legend: { display: false } } },
+  });
+
+  // category doughnut (debits only)
+  const byTag = {};
+  for (const t of transactions)
+    if (t.withdrawal) byTag[t.tag] = (byTag[t.tag] || 0) + t.withdrawal;
+  const tagKeys = Object.keys(byTag).sort((a, b) => byTag[b] - byTag[a]);
+  const palette = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
+  destroyChart("category");
+  charts.category = new Chart($("chartCategory"), {
+    type: "doughnut",
+    data: {
+      labels: tagKeys,
+      datasets: [{ data: tagKeys.map((k) => byTag[k]), backgroundColor: tagKeys.map((_, i) => palette[i % palette.length]), borderWidth: 0 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: "62%",
+      plugins: {
+        legend: { position: "right", labels: { color: th.text, boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: (c) => ` ${c.label}: ₹${fmtINR(c.parsed)}` } },
+      },
+    },
+  });
+}
+
+function renderTopPayees() {
+  const byPayee = {};
+  for (const t of transactions) {
+    if (!t.withdrawal) continue;
+    const p = normalizePayee(t.narration);
+    if (!byPayee[p]) byPayee[p] = { total: 0, count: 0 };
+    byPayee[p].total += t.withdrawal;
+    byPayee[p].count++;
+  }
+  const top = Object.entries(byPayee).sort((a, b) => b[1].total - a[1].total).slice(0, 10);
+  $("topPayeesBody").innerHTML = top.map(([p, v]) =>
+    `<tr><td class="wrap">${escapeHtml(p)}</td><td class="num">${v.count}</td><td class="num">${fmtINR(v.total)}</td></tr>`).join("");
+  $("topPayeesEmpty").style.display = top.length ? "none" : "block";
+}
+
+function renderRecurring() {
+  const byPayee = {};
+  for (const t of transactions) {
+    if (!t.withdrawal) continue;
+    const p = normalizePayee(t.narration);
+    if (!byPayee[p]) byPayee[p] = { months: new Set(), total: 0, count: 0 };
+    byPayee[p].months.add(monthKey(t.date));
+    byPayee[p].total += t.withdrawal;
+    byPayee[p].count++;
+  }
+  const recurring = [];
+  for (const [p, v] of Object.entries(byPayee)) {
+    const idx = [...v.months].map((k) => { const [y, m] = k.split("-"); return +y * 12 + +m; }).sort((a, b) => a - b);
+    let run = 1, best = 1;
+    for (let i = 1; i < idx.length; i++) {
+      run = idx[i] === idx[i - 1] + 1 ? run + 1 : 1;
+      best = Math.max(best, run);
+    }
+    if (best >= 3) recurring.push({ p, streak: best, avg: v.total / v.count, count: v.count });
+  }
+  recurring.sort((a, b) => b.streak - a.streak || b.avg - a.avg);
+  $("recurringList").innerHTML = recurring.slice(0, 12).map((r) => `
+    <div class="list-item">
+      <div class="li-main">
+        <div class="li-title">${escapeHtml(r.p)}</div>
+        <div class="li-sub">${r.streak} consecutive months · ${r.count} payments</div>
+      </div>
+      <div class="li-amt">~₹${fmtINR(r.avg)}</div>
+    </div>`).join("");
+  $("recurringEmpty").style.display = recurring.length ? "none" : "block";
+}
+
+function renderUnusual() {
+  const months = new Set(transactions.map((t) => monthKey(t.date)).filter(Boolean));
+  const totalDebit = transactions.reduce((s, t) => s + (t.withdrawal || 0), 0);
+  const avgMonthlyDebit = months.size ? totalDebit / months.size : 0;
+  const threshold = 2 * avgMonthlyDebit;
+  const flagged = threshold > 0
+    ? transactions.filter((t) => txAmount(t) > threshold)
+        .sort((a, b) => txAmount(b) - txAmount(a)).slice(0, 12)
+    : [];
+  $("unusualList").innerHTML = flagged.map((t) => `
+    <div class="list-item">
+      <div class="li-main">
+        <div class="li-title">${escapeHtml(t.narration || "(no description)")}</div>
+        <div class="li-sub">${fmtDateDisp(t.date)} · ${t.withdrawal != null ? "Debit" : "Credit"} · threshold ₹${fmtINR(threshold)}</div>
+      </div>
+      <div class="li-amt ${t.withdrawal != null ? "debit" : "credit"}" style="color:${t.withdrawal != null ? "var(--red)" : "var(--green)"}">₹${fmtINR(txAmount(t))}</div>
+    </div>`).join("");
+  $("unusualEmpty").style.display = flagged.length ? "none" : "block";
+}
+
+function renderDashboard() {
+  renderCards();
+  renderCharts();
+  renderTopPayees();
+  renderRecurring();
+  renderUnusual();
+}
+
+function refreshAll() {
+  setSliderBounds();
+  currentPage = 1;
+  refreshTable();
+  renderDashboard();
+}
+
+/* ============================ init ============================ */
+
+loadState();
+const preferredTheme = meta.theme ||
+  (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+document.documentElement.dataset.theme = preferredTheme;
+$("themeBtn").textContent = preferredTheme === "dark" ? "☀️ Light" : "🌙 Dark";
+meta.theme = preferredTheme;
+refreshAll();
+</script>
+</body>
+</html>
