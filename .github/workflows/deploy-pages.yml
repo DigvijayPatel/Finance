@@ -2,7 +2,9 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    # claude/* is the repo's current default branch; the github-pages
+    # environment only allows deploys from the default branch
+    branches: [main, claude/epic-albattani-xc9nwo]
   workflow_dispatch:
 
 permissions:
