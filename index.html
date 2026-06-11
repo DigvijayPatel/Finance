@@ -8,6 +8,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root {
   --bg: #f6f7f9;
@@ -200,7 +202,9 @@ tr:hover td { background: var(--surface-2); }
   background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 8px;
   padding: 7px 10px; font-size: 13px; min-width: 0;
 }
-.f-group input[type="text"] { width: 220px; }
+.f-group input[type="text"] { width: 200px; }
+.search-row { display: flex; gap: 6px; }
+.search-row select { min-width: 76px; background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 8px; padding: 7px 6px; font-size: 13px; }
 .f-group input[type="date"] { width: 140px; }
 input[type="date"] { color-scheme: light; }
 html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
@@ -373,7 +377,13 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
     <div class="filters">
       <div class="f-group">
         <label for="searchInput">Search</label>
-        <input type="text" id="searchInput" placeholder="Fuzzy search description, ref, amount…">
+        <div class="search-row">
+          <input type="text" id="searchInput" placeholder="Search description, ref, amount…">
+          <select id="searchMode" title="Search mode">
+            <option value="fuzzy">Fuzzy</option>
+            <option value="exact">Exact</option>
+          </select>
+        </div>
       </div>
       <div class="f-group half">
         <label for="dateFrom">From</label>
@@ -413,9 +423,10 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
       </div>
       <div class="f-group">
         <label>&nbsp;</label>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" id="resetFilters">Reset</button>
-          <button class="btn primary" id="exportCsv">Export CSV</button>
+          <button class="btn" id="exportCsv">Export CSV</button>
+          <button class="btn primary" id="exportPdf">Export PDF report</button>
         </div>
       </div>
     </div>
@@ -1093,7 +1104,7 @@ $("clearModal").addEventListener("click", (e) => {
 
 /* ============================ filters & table ============================ */
 
-const filterState = { search: "", from: "", to: "", amtMin: 0, amtMax: Infinity, type: "all", tag: "all" };
+const filterState = { search: "", searchMode: "fuzzy", from: "", to: "", amtMin: 0, amtMax: Infinity, type: "all", tag: "all" };
 let sliderMax = 100000;
 
 function subsequenceMatch(needle, hay) {
@@ -1102,15 +1113,24 @@ function subsequenceMatch(needle, hay) {
     if (hay[j] === needle[i]) i++;
   return i === needle.length;
 }
-function fuzzyHit(query, t) {
-  const hay = (
+function buildSearchText(t) {
+  return (
     (t.narration || "") + " " + (t.ref_no || "") + " " +
-    (t.withdrawal != null ? t.withdrawal.toFixed(2) : "") + " " +
-    (t.deposit != null ? t.deposit.toFixed(2) : "") + " " +
+    (t.withdrawal != null ? t.withdrawal.toFixed(2) + " " + fmtINR(t.withdrawal) : "") + " " +
+    (t.deposit != null ? t.deposit.toFixed(2) + " " + fmtINR(t.deposit) : "") + " " +
     fmtDateDisp(t.date) + " " + (t.tag || "")
   ).toLowerCase();
+}
+function searchHit(query, t, mode) {
+  const hay = buildSearchText(t);
+  if (mode === "exact") return hay.includes(query);
+  // fuzzy: every token must appear as a substring, or as an in-order
+  // subsequence within a single word (typo tolerance) — never across words
+  const words = hay.split(/[^a-z0-9.@]+/);
   return query.split(/\s+/).every((tok) =>
-    !tok || hay.includes(tok) || (tok.length >= 3 && subsequenceMatch(tok, hay)));
+    !tok || hay.includes(tok) ||
+    (tok.length >= 3 && words.some((w) =>
+      w.length > tok.length && w.length <= tok.length + 6 && subsequenceMatch(tok, w))));
 }
 
 function txAmount(t) { return t.withdrawal != null ? t.withdrawal : (t.deposit != null ? t.deposit : 0); }
@@ -1125,7 +1145,7 @@ function applyFilters() {
     if (filterState.tag !== "all" && t.tag !== filterState.tag) return false;
     const amt = txAmount(t);
     if (amt < filterState.amtMin || amt > filterState.amtMax) return false;
-    if (q && !fuzzyHit(q, t)) return false;
+    if (q && !searchHit(q, t, filterState.searchMode)) return false;
     return true;
   });
   sortFiltered();
@@ -1192,6 +1212,9 @@ document.querySelectorAll("#txTable th.sortable").forEach((th) => {
 $("searchInput").addEventListener("input", debounce((e) => {
   filterState.search = e.target.value; currentPage = 1; refreshTable();
 }, 150));
+$("searchMode").addEventListener("change", (e) => {
+  filterState.searchMode = e.target.value; currentPage = 1; refreshTable();
+});
 $("dateFrom").addEventListener("change", (e) => { filterState.from = e.target.value; currentPage = 1; refreshTable(); });
 $("dateTo").addEventListener("change", (e) => { filterState.to = e.target.value; currentPage = 1; refreshTable(); });
 $("typeFilter").addEventListener("change", (e) => { filterState.type = e.target.value; currentPage = 1; refreshTable(); });
@@ -1227,9 +1250,9 @@ function setSliderBounds() {
 }));
 
 $("resetFilters").addEventListener("click", () => {
-  filterState.search = ""; filterState.from = ""; filterState.to = "";
+  filterState.search = ""; filterState.searchMode = "fuzzy"; filterState.from = ""; filterState.to = "";
   filterState.type = "all"; filterState.tag = "all";
-  $("searchInput").value = ""; $("dateFrom").value = ""; $("dateTo").value = "";
+  $("searchInput").value = ""; $("searchMode").value = "fuzzy"; $("dateFrom").value = ""; $("dateTo").value = "";
   $("typeFilter").value = "all"; $("tagFilter").value = "all";
   setSliderBounds();
   currentPage = 1;
@@ -1252,6 +1275,100 @@ $("exportCsv").addEventListener("click", () => {
   a.click();
   URL.revokeObjectURL(a.href);
   toast(`Exported ${filteredCache.length} rows to CSV.`, "success");
+});
+
+/* ---- PDF report export of filtered view ---- */
+function activeFilterSummary() {
+  const parts = [];
+  if (filterState.search.trim())
+    parts.push(`${filterState.searchMode === "exact" ? "Exact" : "Fuzzy"} search: "${filterState.search.trim()}"`);
+  if (filterState.from) parts.push("From " + fmtDateDisp(filterState.from));
+  if (filterState.to) parts.push("To " + fmtDateDisp(filterState.to));
+  if (filterState.type !== "all") parts.push(filterState.type === "credit" ? "Credits only" : "Debits only");
+  if (filterState.tag !== "all") parts.push("Tag: " + filterState.tag);
+  if (filterState.amtMin > 0 || filterState.amtMax !== Infinity)
+    parts.push(`Amount Rs ${filterState.amtMin.toLocaleString("en-IN")} to ${filterState.amtMax === Infinity ? "max" : filterState.amtMax.toLocaleString("en-IN")}`);
+  return parts.length ? parts.join("  ·  ") : "None (all transactions)";
+}
+
+function exportPdfReport() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const rows = [...filteredCache].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const totalDebit = rows.reduce((s, t) => s + (t.withdrawal || 0), 0);
+  const totalCredit = rows.reduce((s, t) => s + (t.deposit || 0), 0);
+  const net = totalCredit - totalDebit;
+  const firstBal = rows.find((t) => t.balance != null);
+  const lastBal = [...rows].reverse().find((t) => t.balance != null);
+  const opening = firstBal ? firstBal.balance + (firstBal.withdrawal || 0) - (firstBal.deposit || 0) : null;
+  const rs = (v) => v == null ? "-" : "Rs " + fmtINR(v); // built-in PDF fonts lack the rupee glyph
+
+  doc.setFontSize(16);
+  doc.setTextColor(25);
+  doc.text("BankDash - Transaction Report", 40, 46);
+  doc.setFontSize(9);
+  doc.setTextColor(110);
+  doc.text(`Generated ${new Date().toLocaleString("en-IN")}  ·  ${rows.length} transactions  ·  ${fmtDateDisp(rows[0].date)} to ${fmtDateDisp(rows[rows.length - 1].date)}`, 40, 62);
+  doc.text("Filters: " + activeFilterSummary(), 40, 75, { maxWidth: 515 });
+
+  doc.autoTable({
+    startY: 94,
+    head: [["Consolidated summary", ""]],
+    body: [
+      ["Transactions in report", String(rows.length)],
+      ["Total debits (money out)", rs(totalDebit)],
+      ["Total credits (money in)", rs(totalCredit)],
+      [net >= 0 ? "Net flow - surplus / owed to you" : "Net flow - deficit / you owe",
+       (net >= 0 ? "+" : "-") + rs(Math.abs(net))],
+      ["Opening balance (start of results)", rs(opening)],
+      ["Remaining balance (end of results)", lastBal ? rs(lastBal.balance) : "-"],
+    ],
+    theme: "grid",
+    styles: { fontSize: 9.5, cellPadding: 5 },
+    headStyles: { fillColor: [37, 99, 235] },
+    columnStyles: { 1: { halign: "right", fontStyle: "bold" } },
+    margin: { left: 40, right: 40 },
+  });
+
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 14,
+    head: [["Date", "Description", "Ref No", "Debit (Rs)", "Credit (Rs)", "Balance (Rs)"]],
+    body: rows.map((t) => [
+      fmtDateDisp(t.date),
+      (t.narration || "").slice(0, 90),
+      t.ref_no || "",
+      t.withdrawal != null ? fmtINR(t.withdrawal) : "",
+      t.deposit != null ? fmtINR(t.deposit) : "",
+      t.balance != null ? fmtINR(t.balance) : "",
+    ]),
+    theme: "striped",
+    styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
+    headStyles: { fillColor: [37, 99, 235] },
+    columnStyles: {
+      0: { cellWidth: 56 }, 1: { cellWidth: 170 }, 2: { cellWidth: 86 },
+      3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" },
+    },
+    margin: { left: 40, right: 40 },
+    didDrawPage: () => {
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text("Page " + doc.internal.getNumberOfPages(),
+        doc.internal.pageSize.getWidth() - 70, doc.internal.pageSize.getHeight() - 20);
+    },
+  });
+
+  doc.save("bankdash_report_" + new Date().toISOString().slice(0, 10) + ".pdf");
+  toast(`Exported PDF report with ${rows.length} transactions.`, "success");
+}
+
+$("exportPdf").addEventListener("click", () => {
+  if (!filteredCache.length) { toast("Nothing to export — no rows match the current filters.", "error"); return; }
+  if (!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable)) {
+    toast("PDF library not loaded — check your connection and reload the page.", "error");
+    return;
+  }
+  try { exportPdfReport(); }
+  catch (e) { console.error(e); toast("PDF export failed: " + (e.message || e), "error"); }
 });
 
 /* ============================ overview dashboard ============================ */
