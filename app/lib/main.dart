@@ -8,7 +8,8 @@ import 'core/env.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Env.isConfigured) {
-    await Supabase.initialize(url: Env.supabaseUrl, anonKey: Env.supabaseAnonKey);
+    await Supabase.initialize(
+        url: Env.supabaseUrl, publishableKey: Env.supabaseAnonKey);
   }
   runApp(const ProviderScope(child: FinanceApp()));
 }

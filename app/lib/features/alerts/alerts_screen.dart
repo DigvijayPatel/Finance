@@ -69,7 +69,7 @@ class _AlertTile extends ConsumerWidget {
     final color = alert.isExceeded ? theme.colorScheme.error : Colors.orange;
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: color.withOpacity(0.15),
+        backgroundColor: color.withValues(alpha: 0.15),
         child: Icon(alert.isExceeded ? Icons.error : Icons.warning_amber,
             color: color),
       ),

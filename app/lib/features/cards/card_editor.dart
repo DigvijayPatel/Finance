@@ -179,7 +179,7 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _statementDay,
+                    initialValue: _statementDay,
                     decoration: const InputDecoration(
                       labelText: 'Statement day',
                       border: OutlineInputBorder(),
@@ -194,7 +194,7 @@ class _CardEditorState extends ConsumerState<_CardEditor> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _graceDays,
+                    initialValue: _graceDays,
                     decoration: const InputDecoration(
                       labelText: 'Due after (days)',
                       border: OutlineInputBorder(),

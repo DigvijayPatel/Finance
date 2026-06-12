@@ -164,7 +164,7 @@ class _ExpenseTile extends ConsumerWidget {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor:
-              (category?.color ?? Colors.grey).withOpacity(0.15),
+              (category?.color ?? Colors.grey).withValues(alpha: 0.15),
           child: Text(
             category == null ? '?' : category.name.characters.first,
             style: TextStyle(

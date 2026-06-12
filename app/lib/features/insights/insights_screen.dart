@@ -34,11 +34,11 @@ class InsightsScreen extends ConsumerWidget {
                 month: month,
                 monthExpenses: monthExpenses,
                 prevExpenses: prevExpenses),
-            _SectionTitle('Last 6 months'),
+            const _SectionTitle('Last 6 months'),
             _TrendChart(all: all, anchorMonth: month),
-            _SectionTitle('By category'),
+            const _SectionTitle('By category'),
             _CategoryBreakdown(expenses: monthExpenses),
-            _SectionTitle('Top expenses'),
+            const _SectionTitle('Top expenses'),
             _TopExpenses(expenses: monthExpenses),
           ],
         );
@@ -207,7 +207,8 @@ class _TrendChart extends StatelessWidget {
                                 top: Radius.circular(5)),
                             color: i == months.length - 1
                                 ? theme.colorScheme.primary
-                                : theme.colorScheme.primary.withOpacity(0.45),
+                                : theme.colorScheme.primary
+                                    .withValues(alpha: 0.45),
                           ),
                         ]),
                     ],

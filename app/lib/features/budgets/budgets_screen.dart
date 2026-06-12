@@ -169,7 +169,7 @@ class _BudgetCard extends StatelessWidget {
                     value: ratio,
                     minHeight: 8,
                     color: barColor,
-                    backgroundColor: barColor.withOpacity(0.15),
+                    backgroundColor: barColor.withValues(alpha: 0.15),
                   ),
                 ),
                 const SizedBox(height: 6),

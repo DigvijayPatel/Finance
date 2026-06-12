@@ -120,7 +120,7 @@ class _ExpenseEditorState extends ConsumerState<_ExpenseEditor> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: categories.any((c) => c.id == _categoryId)
+              initialValue: categories.any((c) => c.id == _categoryId)
                   ? _categoryId
                   : null,
               decoration: const InputDecoration(
@@ -153,7 +153,8 @@ class _ExpenseEditorState extends ConsumerState<_ExpenseEditor> {
                         ?.copyWith(color: theme.colorScheme.outline))
               else
                 DropdownButtonFormField<String>(
-                  value: cards.any((c) => c.id == _cardId) ? _cardId : null,
+                  initialValue:
+                      cards.any((c) => c.id == _cardId) ? _cardId : null,
                   decoration: const InputDecoration(
                     labelText: 'Card',
                     border: OutlineInputBorder(),
