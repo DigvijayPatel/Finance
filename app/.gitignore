@@ -1,0 +1,21 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/.cxx/
+android/gradle/wrapper/gradle-wrapper.jar
+android/key.properties
+**/*.keystore
+**/*.jks
+
+# Misc
+.idea/
+*.iml
+.DS_Store

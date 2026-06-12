@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meridian — AI Chief of Staff</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #fafbfc;
+  --text: #1a1f27;
+  --text-muted: #6b7280;
+  --border: rgba(26, 31, 39, 0.16);
+  --accent: #7c3aed;
+  --accent-soft: rgba(124, 58, 237, 0.08);
+  --blue: #2563eb;
+  --blue-soft: rgba(37, 99, 235, 0.08);
+  --green: #16a34a;
+  --green-soft: rgba(22, 163, 74, 0.1);
+  --red: #dc2626;
+  --red-soft: rgba(220, 38, 38, 0.1);
+  --amber: #d97706;
+  --amber-soft: rgba(217, 119, 6, 0.12);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --chart-grid: rgba(26, 31, 39, 0.08);
+}
+html[data-theme="dark"] {
+  --bg: #0e1116;
+  --surface: #161b22;
+  --surface-2: #1b212a;
+  --text: #e6e9ee;
+  --text-muted: #8b94a3;
+  --border: rgba(230, 233, 238, 0.16);
+  --accent: #a78bfa;
+  --accent-soft: rgba(167, 139, 250, 0.12);
+  --blue: #5b8def;
+  --blue-soft: rgba(91, 141, 239, 0.12);
+  --green: #34c272;
+  --green-soft: rgba(52, 194, 114, 0.12);
+  --red: #f0635a;
+  --red-soft: rgba(240, 99, 90, 0.12);
+  --amber: #e8a33d;
+  --amber-soft: rgba(232, 163, 61, 0.14);
+  --shadow: none;
+  --chart-grid: rgba(230, 233, 238, 0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.45;
+}
+.container { max-width: 1180px; margin: 0 auto; padding: 16px; }
+button { font: inherit; cursor: pointer; color: inherit; }
+input, select, textarea { font: inherit; color: var(--text); background: var(--surface); border: 0.5px solid var(--border); border-radius: 8px; padding: 7px 10px; }
+textarea { width: 100%; resize: vertical; }
+a { color: var(--accent); }
+
+header.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .logo { width: 34px; height: 34px; border-radius: 8px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
+.brand h1 { font-size: 18px; font-weight: 650; }
+.brand .sub { font-size: 12px; color: var(--text-muted); }
+.topbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn { background: var(--surface); border: 0.5px solid var(--border); border-radius: 8px; padding: 7px 13px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow); text-decoration: none; display: inline-block; }
+.btn:hover { background: var(--surface-2); }
+.btn.danger { color: var(--red); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { opacity: 0.92; background: var(--accent); }
+.btn.small { padding: 4px 9px; font-size: 12px; border-radius: 6px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.tabs { display: flex; gap: 4px; background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px; padding: 4px; width: fit-content; max-width: 100%; overflow-x: auto; margin-bottom: 16px; box-shadow: var(--shadow); }
+.tabs button { border: none; background: transparent; padding: 7px 14px; border-radius: 7px; font-size: 13.5px; font-weight: 550; color: var(--text-muted); white-space: nowrap; }
+.tabs button.active { background: var(--accent-soft); color: var(--accent); }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+.card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 14px; }
+.card h3 { font-size: 14.5px; font-weight: 650; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card h3 .src-chip { font-weight: 450; font-size: 12px; color: var(--text-muted); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 860px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+.chip.green { background: var(--green-soft); color: var(--green); }
+.chip.red { background: var(--red-soft); color: var(--red); }
+.chip.amber { background: var(--amber-soft); color: var(--amber); }
+.chip.blue { background: var(--blue-soft); color: var(--blue); }
+.chip.violet { background: var(--accent-soft); color: var(--accent); }
+.chip.muted { background: var(--surface-2); color: var(--text-muted); border: 0.5px solid var(--border); }
+
+.empty-note { color: var(--text-muted); font-size: 13px; padding: 10px 0; }
+.muted { color: var(--text-muted); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spread { justify-content: space-between; }
+.stack > * + * { margin-top: 8px; }
+
+/* Decision queue cards */
+.qcard { border: 0.5px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); margin-bottom: 10px; }
+.qcard .q-sys { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin-bottom: 3px; }
+.qcard .q-title { font-weight: 650; font-size: 14px; margin-bottom: 4px; }
+.qcard .q-detail { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+.qcard .q-rec { font-size: 12.5px; margin-bottom: 10px; }
+.qcard .q-rec b { color: var(--accent); }
+.qcard.sys-finance { border-left-color: var(--green); } .qcard.sys-finance .q-sys { color: var(--green); }
+.qcard.sys-people { border-left-color: var(--blue); } .qcard.sys-people .q-sys { color: var(--blue); }
+.qcard.sys-goals { border-left-color: var(--amber); } .qcard.sys-goals .q-sys { color: var(--amber); }
+.qcard.sys-habits { border-left-color: var(--red); } .qcard.sys-habits .q-sys { color: var(--red); }
+
+/* Brief */
+.brief { white-space: pre-wrap; font-size: 14px; line-height: 1.65; }
+.brief-meta { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+/* Week grid */
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+@media (max-width: 860px) { .week { grid-template-columns: 1fr; } }
+.day { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 10px; padding: 8px; min-height: 120px; }
+.day.today { border-color: var(--accent); }
+.day .d-head { font-size: 12px; font-weight: 650; margin-bottom: 6px; color: var(--text-muted); }
+.day.today .d-head { color: var(--accent); }
+.block { border-radius: 7px; padding: 5px 7px; font-size: 12px; margin-bottom: 5px; border: 0.5px solid var(--border); background: var(--surface); position: relative; }
+.block .b-time { font-weight: 650; }
+.block.done { opacity: 0.55; text-decoration: line-through; }
+.block.k-deep { border-left: 3px solid var(--accent); }
+.block.k-meeting { border-left: 3px solid var(--blue); }
+.block.k-family { border-left: 3px solid var(--red); }
+.block.k-health { border-left: 3px solid var(--green); }
+.block.k-admin { border-left: 3px solid var(--amber); }
+.block.k-rest { border-left: 3px solid var(--text-muted); }
+.block .b-shield { position: absolute; top: 3px; right: 5px; font-size: 11px; }
+.block .b-actions { margin-top: 4px; display: flex; gap: 4px; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--text-muted); font-weight: 600; font-size: 12px; padding: 6px 8px; border-bottom: 0.5px solid var(--border); }
+td { padding: 7px 8px; border-bottom: 0.5px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Memory ledger */
+.mem { border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); margin-bottom: 8px; }
+.mem .m-text { font-size: 13.5px; margin-bottom: 5px; }
+.mem .m-meta { font-size: 11.5px; color: var(--text-muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Forms */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin-bottom: 8px; }
+details.adder { margin-bottom: 12px; }
+details.adder summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--accent); list-style: none; }
+details.adder summary::before { content: "+ "; }
+details.adder[open] summary::before { content: "− "; }
+details.adder .card { margin-top: 8px; margin-bottom: 0; }
+
+/* Habit grid */
+.hgrid { display: flex; gap: 3px; }
+.hcell { width: 16px; height: 16px; border-radius: 4px; background: var(--surface-2); border: 0.5px solid var(--border); }
+.hcell.done { background: var(--green); border-color: var(--green); }
+.hcell.miss { background: var(--red-soft); }
+.hcell.off { opacity: 0.3; }
+
+/* Capacity bar */
+.capbar { height: 10px; border-radius: 999px; background: var(--surface-2); border: 0.5px solid var(--border); overflow: hidden; }
+.capbar > div { height: 100%; background: var(--green); transition: width 0.3s; }
+.capbar.over > div { background: var(--red); }
+
+/* Touchpoint tray */
+.tray { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.tp { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 10px; padding: 12px; }
+.tp .tp-name { font-weight: 650; margin-bottom: 2px; }
+.tp .tp-why { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.tp .tp-draft { font-size: 12.5px; background: var(--surface); border: 0.5px dashed var(--border); border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+
+/* Ritual stepper */
+.steps { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.steps .st { padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-2); border: 0.5px solid var(--border); color: var(--text-muted); }
+.steps .st.cur { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.steps .st.donestep { color: var(--green); }
+
+/* Review (learning) */
+.flash { text-align: center; padding: 28px 16px; }
+.flash .f-front { font-size: 17px; font-weight: 650; margin-bottom: 14px; }
+.flash .f-back { font-size: 14.5px; color: var(--text-muted); margin-bottom: 16px; }
+
+/* Pending veto actions */
+.pending { border: 0.5px solid var(--amber); background: var(--amber-soft); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pending .p-label { font-size: 13px; font-weight: 600; }
+.pending .p-when { font-size: 12px; color: var(--amber); }
+
+/* Toast */
+#toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 9px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 50; max-width: 90vw; }
+#toast.show { opacity: 1; }
+
+.kpi { display: flex; gap: 14px; flex-wrap: wrap; }
+.kpi .k { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; min-width: 120px; }
+.kpi .k .kv { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .k .kl { font-size: 11.5px; color: var(--text-muted); }
+.bar-wrap { position: relative; height: 220px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">M</div>
+    <div>
+      <h1>Meridian</h1>
+      <div class="sub">AI Chief of Staff · local-first, your data never leaves this browser</div>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <a class="btn" href="index.html" title="Bank statement dashboard">📊 BankDash</a>
+    <button class="btn" id="exportBtn">Export</button>
+    <button class="btn" id="importBtn">Import</button>
+    <input type="file" id="importFile" accept=".json" style="display:none">
+    <button class="btn" id="themeBtn">🌙 Dark</button>
+  </div>
+</header>
+
+<div class="tabs" role="tablist">
+  <button data-tab="today" class="active">Today</button>
+  <button data-tab="goals">Goals</button>
+  <button data-tab="habits">Habits</button>
+  <button data-tab="calendar">Calendar</button>
+  <button data-tab="finance">Finance</button>
+  <button data-tab="people">People</button>
+  <button data-tab="learning">Learning</button>
+  <button data-tab="ledger">Ledger</button>
+  <button data-tab="review">Sunday Board</button>
+  <button data-tab="settings">Settings</button>
+</div>
+
+<!-- ============ TODAY ============ -->
+<div class="tab-pane active" id="pane-today">
+  <div class="card" id="onboardCard" style="display:none">
+    <h3>Welcome to Meridian</h3>
+    <p class="muted" style="margin-bottom:10px">A chief of staff initiates; you decide. Meridian works the gap between what you said matters and what you actually do — through briefings, a decision queue, and weekly rituals, not chat. Everything is stored locally in this browser.</p>
+    <div class="row">
+      <button class="btn primary" id="seedBtn">Load example life (recommended first look)</button>
+      <button class="btn" id="startBlankBtn">Start blank</button>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>☀️ Morning Brief
+        <span class="row" style="margin-left:auto">
+          <button class="btn small" id="briefPlayBtn">▶ Play</button>
+          <button class="btn small" id="briefStopBtn">■ Stop</button>
+        </span>
+      </h3>
+      <div class="brief" id="briefText"></div>
+      <div class="brief-meta" id="briefMeta"></div>
+    </div>
+    <div class="card">
+      <h3>📥 Decision Queue <span class="src-chip">pre-worked decisions — judge, don't process</span></h3>
+      <div id="queueList"></div>
+    </div>
+  </div>
+
+  <div class="card" id="pendingCard" style="display:none">
+    <h3>⏳ Acting unless you veto <span class="src-chip">autonomy ladder: act-with-veto-window</span></h3>
+    <div id="pendingList"></div>
+  </div>
+</div>
+
+<!-- ============ GOALS ============ -->
+<div class="tab-pane" id="pane-goals">
+  <details class="adder"><summary>Add goal</summary>
+    <div class="card">
+      <div class="form-grid">
+        <input id="gTitle" placeholder="Goal title">
+        <input id="gWhy" placeholder="Why it matters (narrative)">
+        <input id="gHrs" type="number" min="0" step="0.5" placeholder="Target hrs/week">
+        <select id="gPri"><option value="high">High priority</option><option value="normal" selected>Normal priority</option><option value="low">Low priority</option></select>
+      </div>
+      <button class="btn primary" id="gAdd">Add goal</button>
+    </div>
+  </details>
+  <div id="goalsList"></div>
+</div>
+
+<!-- ============ HABITS ============ -->
+<div class="tab-pane" id="pane-habits">
+  <div class="card">
+    <h3>Capacity budget <span class="src-chip">discipline is finite — Meridian refuses to over-allocate it</span></h3>
+    <div class="row spread" style="margin-bottom:6px">
+      <span id="capLabel"></span>
+      <span class="muted" id="capHint"></span>
+    </div>
+    <div class="capbar" id="capBar"><div style="width:0%"></div></div>
+  </div>
+  <details class="adder"><summary>Add habit (negotiated against capacity)</summary>
+    <div class="card">
+      <div class="form-grid">
+        <input id="hName" placeholder="Habit name">
+        <select id="hLoad"><option value="1">Light load (1)</option><option value="2" selected>Medium load (2)</option><option value="3">Heavy load (3)</option></select>
+        <select id="hDays">
+          <option value="all" selected>Every day</option>
+          <option value="wk">Weekdays</option>
+          <option value="we">Weekends</option>
+        </select>
+      </div>
+      <div class="muted" id="hVerdict" style="margin-bottom:8px"></div>
+      <button class="btn primary" id="hAdd">Add habit</button>
+    </div>
+  </details>
+  <div id="habitsList"></div>
+</div>
+
+<!-- ============ CALENDAR ============ -->
+<div class="tab-pane" id="pane-calendar">
+  <div class="card">
+    <div class="row spread" style="margin-bottom:10px">
+      <h3 style="margin-bottom:0">🗓 Attention Treasury</h3>
+      <div class="row">
+        <button class="btn small" id="wkPrev">←</button>
+        <span id="wkLabel" style="font-weight:600"></span>
+        <button class="btn small" id="wkNext">→</button>
+      </div>
+    </div>
+    <details class="adder"><summary>Add block</summary>
+      <div class="card">
+        <div class="form-grid">
+          <input id="bDate" type="date">
+          <input id="bStart" type="time" value="09:00">
+          <input id="bDur" type="number" min="0.5" step="0.5" value="1" placeholder="Hours">
+          <input id="bTitle" placeholder="Title">
+          <select id="bKind">
+            <option value="deep">Deep work</option><option value="meeting">Meeting</option>
+            <option value="family">Family</option><option value="health">Health</option>
+            <option value="admin">Admin</option><option value="rest">Rest</option>
+          </select>
+          <select id="bGoal"></select>
+        </div>
+        <label style="font-size:13px"><input type="checkbox" id="bDef"> Defended block (Meridian flags anything that displaces it)</label><br><br>
+        <button class="btn primary" id="bAdd">Add block</button>
+      </div>
+    </details>
+    <div class="week" id="weekGrid"></div>
+  </div>
+  <div class="card">
+    <h3>Calendar P&L <span class="src-chip">this week's attention, by where it actually went</span></h3>
+    <div class="bar-wrap"><canvas id="calChart"></canvas></div>
+  </div>
+</div>
+
+<!-- ============ FINANCE ============ -->
+<div class="tab-pane" id="pane-finance">
+  <div class="card" id="finStatus"></div>
+  <div class="card">
+    <h3>Values P&L <span class="src-chip">your stated values vs. where the money actually flowed</span></h3>
+    <details class="adder"><summary>Edit value → spending mappings</summary>
+      <div class="card">
+        <div id="valuesEditor"></div>
+        <div class="form-grid">
+          <input id="vName" placeholder="Value (e.g. Health)">
+          <input id="vKeys" placeholder="Keywords, comma-separated (e.g. gym,pharmacy,decathlon)">
+        </div>
+        <button class="btn primary" id="vAdd">Add value</button>
+      </div>
+    </details>
+    <div class="bar-wrap"><canvas id="valChart"></canvas></div>
+    <div id="valTable" style="margin-top:12px"></div>
+  </div>
+  <div class="card">
+    <h3>Recurring outflows <span class="src-chip">payees hitting your account 3+ months running — zombie subscriptions hide here</span></h3>
+    <div id="recurringList"></div>
+  </div>
+</div>
+
+<!-- ============ PEOPLE ============ -->
+<div class="tab-pane" id="pane-people">
+  <details class="adder"><summary>Add person</summary>
+    <div class="card">
+      <div class="form-grid">
+        <input id="pName" placeholder="Name">
+        <select id="pTier"><option value="1">Tier 1 — intimate</option><option value="2" selected>Tier 2 — ally</option><option value="3">Tier 3 — network</option></select>
+        <input id="pCad" type="number" min="1" value="30" placeholder="Contact every N days">
+        <input id="pNote" placeholder="Context note">
+      </div>
+      <button class="btn primary" id="pAdd">Add person</button>
+    </div>
+  </details>
+  <div class="card">
+    <h3>🤝 Reciprocity graph <span class="src-chip">Meridian drafts — only you send. It never speaks as you to people you love.</span></h3>
+    <div id="peopleList"></div>
+  </div>
+  <div class="card">
+    <h3>📮 Touchpoint Tray <span class="src-chip">this week's prepared touchpoints — tend your relationships in ten minutes</span></h3>
+    <div class="tray" id="trayList"></div>
+  </div>
+</div>
+
+<!-- ============ LEARNING ============ -->
+<div class="tab-pane" id="pane-learning">
+  <details class="adder"><summary>Add card to learning queue</summary>
+    <div class="card">
+      <div class="form-grid">
+        <input id="lTopic" placeholder="Topic">
+        <select id="lGoal"></select>
+      </div>
+      <input id="lFront" placeholder="Prompt / question" style="width:100%;margin-bottom:8px">
+      <textarea id="lBack" rows="2" placeholder="Answer / what to retain"></textarea><br><br>
+      <button class="btn primary" id="lAdd">Add card</button>
+    </div>
+  </details>
+  <div class="grid2">
+    <div class="card">
+      <h3>🔁 Spaced review <span class="src-chip" id="dueCount"></span>
+        <button class="btn small" id="seminarBtn" style="margin-left:auto">🎧 Commute seminar</button>
+      </h3>
+      <div id="flashArea"><div class="empty-note">Nothing due. Cards return on their schedule.</div></div>
+    </div>
+    <div class="card">
+      <h3>🎤 Teach-back <span class="src-chip">retention is verified the only way that works: explain it</span></h3>
+      <div id="teachArea"></div>
+    </div>
+  </div>
+  <div class="card"><h3>Queue</h3><div id="learnList"></div></div>
+</div>
+
+<!-- ============ LEDGER ============ -->
+<div class="tab-pane" id="pane-ledger">
+  <div class="card">
+    <h3>🧠 The Ledger <span class="src-chip">everything Meridian believes about you — auditable, correctable, forgettable</span></h3>
+    <div class="row" style="margin-bottom:10px">
+      <select id="memFilter">
+        <option value="all">All layers</option>
+        <option value="episodic">Episodic — what happened</option>
+        <option value="semantic">Semantic — durable facts</option>
+        <option value="procedural">Procedural — how you like things done</option>
+        <option value="narrative">Narrative — values & story</option>
+      </select>
+    </div>
+    <details class="adder"><summary>Record a memory</summary>
+      <div class="card">
+        <div class="form-grid">
+          <select id="mLayer">
+            <option value="episodic">Episodic</option><option value="semantic">Semantic</option>
+            <option value="procedural">Procedural</option><option value="narrative">Narrative</option>
+          </select>
+          <input id="mSource" placeholder="Provenance (where this came from)">
+        </div>
+        <textarea id="mText" rows="2" placeholder="The memory itself"></textarea><br><br>
+        <button class="btn primary" id="mAdd">Record</button>
+      </div>
+    </details>
+    <div id="memList"></div>
+  </div>
+  <div class="card">
+    <h3>🗣 Interview Mode <span class="src-chip">memory built by elicitation, not by hoping you mention things</span></h3>
+    <div id="interviewQ" style="font-weight:600; margin-bottom:8px"></div>
+    <textarea id="interviewA" rows="2" placeholder="Answer in a sentence or two…"></textarea><br><br>
+    <div class="row">
+      <button class="btn primary" id="interviewSave">Save to Ledger</button>
+      <button class="btn" id="interviewSkip">Different question</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SUNDAY BOARD ============ -->
+<div class="tab-pane" id="pane-review">
+  <div class="card">
+    <h3>🪑 The Sunday Board <span class="src-chip">you are the CEO; Meridian staffs the meeting</span></h3>
+    <div class="steps" id="ritualSteps"></div>
+    <div id="ritualBody"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="ritualPrev">← Back</button>
+      <button class="btn primary" id="ritualNext">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div class="tab-pane" id="pane-settings">
+  <div class="card">
+    <h3>Autonomy ladder <span class="src-chip">trust is granted in inches and revocable in one tap</span></h3>
+    <table>
+      <tr><th>Domain</th><th>Level</th><th></th></tr>
+      <tr><td>Calendar (declines, holds)</td><td><select id="autCalendar" class="autSel"></select></td><td class="muted">Drafted declines this period: <span id="statCal">0</span></td></tr>
+      <tr><td>Finance (cancellations, negotiations)</td><td><select id="autFinance" class="autSel"></select></td><td class="muted">Approved actions: <span id="statFin">0</span></td></tr>
+      <tr><td>People (drafts only — hard ceiling)</td><td><select id="autPeople" class="autSel" disabled></select></td><td class="muted">Structural limit: Meridian cannot send to Tier 1</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h3>Tuning</h3>
+    <div class="form-grid">
+      <label>Daily discipline capacity<br><input id="setCap" type="number" min="1" max="20"></label>
+      <label>Brief voice rate<br><input id="setRate" type="number" min="0.5" max="2" step="0.1"></label>
+    </div>
+    <button class="btn primary" id="setSave">Save</button>
+  </div>
+  <div class="card">
+    <h3>Data</h3>
+    <p class="muted" style="margin-bottom:10px">Everything lives in this browser's localStorage. Export regularly. Deletion is real deletion.</p>
+    <div class="row">
+      <button class="btn" id="exportBtn2">Export JSON</button>
+      <button class="btn danger" id="wipeBtn">Forget everything</button>
+    </div>
+  </div>
+</div>
+
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Meridian — local-first AI Chief of Staff
+   Storage: meridian_state_v1 (own data) + bankdash_transactions (read-only)
+   ===================================================================== */
+
+const LS_KEY = "meridian_state_v1";
+const LS_BANK = "bankdash_transactions";
+const AUT_LEVELS = ["observe", "draft", "act-veto", "act"];
+const AUT_LABELS = { observe: "Observe", draft: "Draft for approval", "act-veto": "Act with veto window", act: "Act autonomously" };
+const KIND_LABELS = { deep: "Deep work", meeting: "Meetings", family: "Family", health: "Health", admin: "Admin", rest: "Rest" };
+
+let S = null;          // app state
+let bank = [];         // bankdash transactions (read-only)
+let week0 = mondayOf(new Date()); // calendar week being viewed
+let ritualStep = 0;
+let charts = {};
+
+/* ---------------- state ---------------- */
+function defaultState() {
+  return {
+    memories: [], goals: [], habits: [], values: [], blocks: [], people: [], learning: [],
+    capacity: 6,
+    autonomy: { calendar: "draft", finance: "observe", people: "draft" },
+    pending: [],                     // veto-window actions
+    decisions: { dismissed: {}, log: [] },
+    finKeep: [],                     // whitelisted recurring payees
+    settings: { theme: null, rate: 1 },
+    lastReview: null, onboarded: false
+  };
+}
+function load() {
+  try { S = Object.assign(defaultState(), JSON.parse(localStorage.getItem(LS_KEY) || "{}")); }
+  catch { S = defaultState(); }
+  try { bank = JSON.parse(localStorage.getItem(LS_BANK) || "[]"); } catch { bank = []; }
+}
+function save() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(S)); }
+  catch { toast("Could not save (storage may be full).", true); }
+}
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+/* ---------------- date helpers ---------------- */
+function iso(d) { const x = new Date(d); return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0"); }
+const todayStr = () => iso(new Date());
+function mondayOf(d) { const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function daysAgo(isoStr) { return Math.floor((Date.now() - new Date(isoStr + "T00:00")) / 86400000); }
+function fmtDay(d) { return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function weekDates(start) { return Array.from({ length: 7 }, (_, i) => iso(addDays(start, i))); }
+function habitDueOn(h, date) {
+  const dow = new Date(date + "T00:00").getDay();
+  if (h.days === "wk") return dow >= 1 && dow <= 5;
+  if (h.days === "we") return dow === 0 || dow === 6;
+  return true;
+}
+
+/* ---------------- toast ---------------- */
+let toastTimer = null;
+function toast(msg, isErr) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  t.style.background = isErr ? "var(--red)" : "var(--text)";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+/* =====================================================================
+   BANK DATA — read-only integration with BankDash
+   ===================================================================== */
+function bankDebitsInMonth(ym) { // ym = "2026-06"
+  return bank.filter(t => t.withdrawal > 0 && String(t.date).startsWith(ym));
+}
+function normPayee(narr) {
+  return String(narr || "").toUpperCase()
+    .replace(/\b(UPI|NEFT|IMPS|RTGS|ACH|POS|VPS|ATW|TPT|BIL|PAY|REF|TXN)\b/g, " ")
+    .replace(/[0-9@\/\\:_\-.]+/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, 3).join(" ");
+}
+function recurringPayees() {
+  const byPayee = {};
+  for (const t of bank) {
+    if (!(t.withdrawal > 0)) continue;
+    const p = normPayee(t.narration);
+    if (p.length < 3) continue;
+    (byPayee[p] = byPayee[p] || []).push(t);
+  }
+  const out = [];
+  for (const [p, txns] of Object.entries(byPayee)) {
+    const months = [...new Set(txns.map(t => String(t.date).slice(0, 7)))].sort();
+    if (months.length < 3) continue;
+    // consecutive-month check
+    let run = 1, best = 1;
+    for (let i = 1; i < months.length; i++) {
+      const [y1, m1] = months[i - 1].split("-").map(Number), [y2, m2] = months[i].split("-").map(Number);
+      run = (y2 * 12 + m2) - (y1 * 12 + m1) === 1 ? run + 1 : 1;
+      best = Math.max(best, run);
+    }
+    if (best < 3) continue;
+    const avg = txns.reduce((s, t) => s + t.withdrawal, 0) / txns.length;
+    out.push({ payee: p, months: months.length, avg, last: txns[txns.length - 1].date, total: txns.reduce((s, t) => s + t.withdrawal, 0) });
+  }
+  return out.sort((a, b) => b.total - a.total);
+}
+function valuesPnl(ym) {
+  const debits = bankDebitsInMonth(ym);
+  const rows = S.values.map(v => ({ ...v, spend: 0 }));
+  let unaligned = 0, total = 0;
+  for (const t of debits) {
+    const hay = (String(t.narration || "") + " " + String(t.tag || "")).toLowerCase();
+    total += t.withdrawal;
+    const hit = rows.find(v => v.keywords.some(k => k && hay.includes(k.toLowerCase())));
+    if (hit) hit.spend += t.withdrawal; else unaligned += t.withdrawal;
+  }
+  return { rows, unaligned, total, count: debits.length };
+}
+const fmtINR = n => "₹" + Math.round(n).toLocaleString("en-IN");
+
+/* =====================================================================
+   RULES ENGINE — the Decision Queue
+   ===================================================================== */
+function goalHrsInRange(g, fromIso, toIso) {
+  return (g.logs || []).filter(l => l.date >= fromIso && l.date <= toIso).reduce((s, l) => s + l.hrs, 0);
+}
+function dismissed(key) {
+  const d = S.decisions.dismissed[key];
+  return d === "forever" || d === todayStr();
+}
+function dismiss(key, forever) { S.decisions.dismissed[key] = forever ? "forever" : todayStr(); save(); renderAll(); }
+function logDecision(key, action) { S.decisions.log.push({ date: todayStr(), key, action }); }
+
+function buildQueue() {
+  const q = [];
+  const wkStart = iso(mondayOf(new Date())), today = todayStr();
+
+  // Goal drift: active goal with target, behind pace this week
+  for (const g of S.goals.filter(g => g.status === "active" && g.targetHrsWk > 0)) {
+    const done = goalHrsInRange(g, wkStart, today);
+    const dayN = ((new Date().getDay() + 6) % 7) + 1; // 1..7
+    const pace = g.targetHrsWk * (dayN / 7);
+    if (dayN >= 3 && done < pace * 0.5) {
+      q.push({ key: `drift-${g.id}-${wkStart}`, sys: "goals", title: `“${g.title}” is starving`,
+        detail: `${done.toFixed(1)}h logged this week vs ~${pace.toFixed(1)}h expected by now (target ${g.targetHrsWk}h/wk).`,
+        rec: "Defend it: add a block tomorrow morning before the week eats it.",
+        actions: [
+          { label: "Add block tomorrow", fn: () => { addBlock(iso(addDays(new Date(), 1)), "08:00", 1.5, g.title, "deep", g.id, true); toast("Defended block added for tomorrow."); } },
+          { label: "Renegotiate target", fn: () => { g.targetHrsWk = Math.max(0.5, +(g.targetHrsWk / 2).toFixed(1)); toast(`Target halved to ${g.targetHrsWk}h/wk — honest beats aspirational.`); } },
+          { label: "Skip today", fn: null }
+        ]});
+    }
+  }
+
+  // Silent goal death: no logs in 21 days → forced recommit/renegotiate/kill
+  for (const g of S.goals.filter(g => g.status === "active")) {
+    const lastLog = (g.logs || []).map(l => l.date).sort().pop();
+    const age = daysAgo(lastLog || g.createdAt);
+    if (age >= 21) {
+      q.push({ key: `stale-${g.id}`, sys: "goals", title: `No goal dies silently: “${g.title}”`,
+        detail: `Zero hours in ${age} days. Either it matters or it doesn't — deciding is cheaper than carrying it.`,
+        rec: "If you can't name its next concrete step right now, kill it explicitly.",
+        actions: [
+          { label: "Recommit", fn: () => { (g.logs = g.logs || []).push({ date: today, hrs: 0, note: "Recommitted at queue" }); toast("Recommitted. It's on the clock again."); } },
+          { label: "Kill it", fn: () => { g.status = "killed"; addMemory("episodic", `Explicitly killed goal “${g.title}” after ${age} days of inaction.`, "Decision Queue"); toast("Killed — and recorded honestly in the Ledger."); } },
+          { label: "Snooze", fn: null }
+        ]});
+    }
+  }
+
+  // Contradiction: high-priority goal got fewer hours this week than a low one
+  const act = S.goals.filter(g => g.status === "active");
+  const hi = act.filter(g => g.priority === "high"), lo = act.filter(g => g.priority === "low");
+  for (const g of hi) {
+    const gh = goalHrsInRange(g, wkStart, today);
+    const beat = lo.find(l => goalHrsInRange(l, wkStart, today) > gh + 1);
+    if (beat) {
+      q.push({ key: `contra-${g.id}-${wkStart}`, sys: "goals", title: "Update the story, or defend it",
+        detail: `“${g.title}” is your stated top priority but got ${gh.toFixed(1)}h this week, while low-priority “${beat.title}” got ${goalHrsInRange(beat, wkStart, today).toFixed(1)}h.`,
+        rec: "Either the priority label is wrong, or the calendar is. One of them should change.",
+        actions: [
+          { label: "Defend (block tomorrow)", fn: () => { addBlock(iso(addDays(new Date(), 1)), "08:00", 1.5, g.title, "deep", g.id, true); toast("Defended block added."); } },
+          { label: "Update the story", fn: () => { g.priority = "normal"; addMemory("narrative", `Demoted “${g.title}” from top priority — behavior said so first.`, "Contradiction Detection"); toast("Narrative updated to match reality."); } },
+          { label: "Skip", fn: null }
+        ]});
+    }
+  }
+
+  // Habit overload today
+  const todayLoad = S.habits.filter(h => habitDueOn(h, today)).reduce((s, h) => s + h.load, 0);
+  if (todayLoad > S.capacity) {
+    q.push({ key: `overload-${today}`, sys: "habits", title: "Today is over capacity",
+      detail: `Scheduled habit load is ${todayLoad} against a budget of ${S.capacity}. Unplanned failure breaks stre-wide trust; planned skips don't.`,
+      rec: "Pre-decide the skip instead of letting the day decide for you.",
+      actions: S.habits.filter(h => habitDueOn(h, today) && !h.history[today]).slice(0, 2)
+        .map(h => ({ label: `Skip “${h.name}” today`, fn: () => { h.history[today] = "skipped"; toast(`“${h.name}” deliberately skipped — budget balanced.`); } }))
+        .concat([{ label: "Push through", fn: null }])});
+  }
+
+  // People debt
+  for (const p of S.people) {
+    const since = p.lastContact ? daysAgo(p.lastContact) : 999;
+    if (since > p.cadenceDays && !dismissed(`person-${p.id}`)) {
+      q.push({ key: `person-${p.id}`, sys: "people", title: `${p.name} is drifting`,
+        detail: `${since === 999 ? "No contact on record" : since + " days since contact"} — your tier-${p.tier} rhythm is every ${p.cadenceDays} days.`,
+        rec: "A draft is ready in the Touchpoint Tray. Thirty seconds closes this.",
+        actions: [
+          { label: "Mark contacted", fn: () => { p.lastContact = today; (p.history = p.history || []).push({ date: today, note: "via queue" }); toast(`${p.name}: contact logged.`); } },
+          { label: "Copy draft", fn: () => { copyText(draftFor(p)); toast("Draft copied — paste it wherever you actually talk."); } },
+          { label: "Snooze", fn: null }
+        ]});
+    }
+  }
+
+  // Finance: candidate zombie subscriptions
+  if (bank.length) {
+    for (const r of recurringPayees().slice(0, 6)) {
+      if (S.finKeep.includes(r.payee)) continue;
+      if (S.pending.some(p => p.ref === r.payee)) continue;
+      q.push({ key: `sub-${r.payee}`, sys: "finance", title: `Recurring: ${r.payee}`,
+        detail: `Seen ${r.months} months, ~${fmtINR(r.avg)}/month, ${fmtINR(r.total)} total. Last hit ${r.last}.`,
+        rec: S.autonomy.finance === "act-veto" || S.autonomy.finance === "act"
+          ? "I can queue the cancellation with a 48-hour veto window."
+          : "Confirm it's intentional, or mark it for cancellation.",
+        actions: [
+          { label: "Keep — intentional", fn: () => { S.finKeep.push(r.payee); toast("Whitelisted. I won't raise it again."); } },
+          { label: AUT_LEVELS.indexOf(S.autonomy.finance) >= 2 ? "Cancel (48h veto)" : "Draft cancellation",
+            fn: () => {
+              if (AUT_LEVELS.indexOf(S.autonomy.finance) >= 2) {
+                S.pending.push({ id: uid(), ref: r.payee, label: `Cancel recurring payment: ${r.payee} (~${fmtINR(r.avg)}/mo)`, executeAt: Date.now() + 48 * 3600e3, system: "finance" });
+                toast("Queued. You have 48 hours to veto.");
+              } else {
+                copyText(`Hi — please cancel my recurring subscription/mandate (${r.payee}). Effective immediately. Thanks.`);
+                toast("Cancellation note copied to clipboard.");
+              }
+            } },
+          { label: "Snooze", fn: null }
+        ]});
+    }
+  }
+
+  // Memory decay
+  for (const m of S.memories.filter(m => m.layer === "semantic" && !m.archived)) {
+    const age = daysAgo(m.confirmedAt || m.createdAt);
+    if (age > 90 && !dismissed(`mem-${m.id}`)) {
+      q.push({ key: `mem-${m.id}`, sys: "ledger", title: "Is this still true?",
+        detail: `“${m.text}” — recorded ${age} days ago (${m.source || "unknown source"}) and never reconfirmed. Stale beliefs are how assistants embarrass you.`,
+        rec: "Confirm or forget; don't let it rot.",
+        actions: [
+          { label: "Still true", fn: () => { m.confirmedAt = today; toast("Reconfirmed."); } },
+          { label: "Forget", fn: () => { m.archived = true; toast("Forgotten — and its inferences with it."); } },
+          { label: "Snooze", fn: null }
+        ]});
+    }
+  }
+
+  // Learning due
+  const due = S.learning.filter(c => !c.done && c.due <= today);
+  if (due.length >= 3) {
+    q.push({ key: `learn-${today}`, sys: "learning", title: `${due.length} cards due for review`,
+      detail: "Spaced repetition only works if the spacing is respected — these expire into forgetting.",
+      rec: "Four minutes now, or relearn it all later.",
+      actions: [{ label: "Start review", fn: () => switchTab("learning") }, { label: "Snooze", fn: null }]});
+  }
+
+  return q.filter(c => !dismissed(c.key));
+}
+
+/* ---------------- pending veto actions ---------------- */
+function processPending() {
+  const now = Date.now();
+  const ripe = S.pending.filter(p => p.executeAt <= now);
+  for (const p of ripe) {
+    logDecision(p.ref || p.id, "executed:" + p.label);
+    addMemory("episodic", `Executed (veto window passed): ${p.label}`, "Autonomy ladder");
+    if (p.system === "finance" && p.ref) S.finKeep.push(p.ref); // stop re-raising it
+    toast("Executed after veto window: " + p.label);
+  }
+  if (ripe.length) { S.pending = S.pending.filter(p => p.executeAt > now); save(); }
+}
+
+/* =====================================================================
+   MORNING BRIEF
+   ===================================================================== */
+function buildBrief() {
+  const today = todayStr();
+  const lines = [];
+  const hr = new Date().getHours();
+  lines.push((hr < 12 ? "Good morning." : hr < 18 ? "Good afternoon." : "Good evening.") + " Here's the shape of today.");
+
+  const blocks = S.blocks.filter(b => b.date === today).sort((a, b) => a.start < b.start ? -1 : 1);
+  if (blocks.length) {
+    const deep = blocks.filter(b => b.kind === "deep").reduce((s, b) => s + b.dur, 0);
+    const first = blocks[0];
+    lines.push(`Calendar: ${blocks.length} block${blocks.length > 1 ? "s" : ""}, first at ${first.start} — ${first.title}.` + (deep ? ` ${deep}h of deep work is defended.` : " No deep work is protected today — that's a choice, make it on purpose."));
+  } else {
+    lines.push("Calendar: open. Unclaimed time gets claimed by other people — consider placing one block now.");
+  }
+
+  const dueH = S.habits.filter(h => habitDueOn(h, today));
+  const loadDue = dueH.reduce((s, h) => s + h.load, 0);
+  if (dueH.length) lines.push(`Habits: ${dueH.length} due, load ${loadDue} of ${S.capacity} budget${loadDue > S.capacity ? " — over capacity, pre-decide a skip" : ""}.`);
+
+  const q = buildQueue();
+  if (q.length) {
+    lines.push(`Decision queue: ${q.length} item${q.length > 1 ? "s" : ""} pre-worked. Top of the stack: ${q.slice(0, 3).map(c => c.title).join("; ")}.`);
+  } else {
+    lines.push("Decision queue: clear. Enjoy it — it won't last.");
+  }
+
+  const dueCards = S.learning.filter(c => !c.done && c.due <= today).length;
+  if (dueCards) lines.push(`Learning: ${dueCards} card${dueCards > 1 ? "s" : ""} due — the commute seminar can read them to you.`);
+
+  const overdue = S.people.filter(p => (p.lastContact ? daysAgo(p.lastContact) : 999) > p.cadenceDays).length;
+  if (overdue) lines.push(`People: ${overdue} relationship${overdue > 1 ? "s" : ""} past rhythm — drafts are in the tray.`);
+
+  if (S.pending.length) lines.push(`Standing by to act on ${S.pending.length} item${S.pending.length > 1 ? "s" : ""} unless you veto.`);
+
+  return lines.join("\n\n");
+}
+function speak(text) {
+  if (!("speechSynthesis" in window)) { toast("Speech not supported in this browser.", true); return; }
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text.replace(/\n+/g, ". "));
+  u.rate = S.settings.rate || 1;
+  speechSynthesis.speak(u);
+}
+
+/* =====================================================================
+   HELPERS shared by systems
+   ===================================================================== */
+function addMemory(layer, text, source) {
+  S.memories.push({ id: uid(), layer, text, source: source || "manual", confidence: "high", createdAt: todayStr(), confirmedAt: todayStr(), archived: false });
+}
+function addBlock(date, start, dur, title, kind, goalId, defended) {
+  S.blocks.push({ id: uid(), date, start, dur: +dur, title, kind, goalId: goalId || "", done: false, defended: !!defended });
+  save();
+}
+function draftFor(p) {
+  const t1 = [`Hey ${p.name} — you crossed my mind today. No agenda, just checking in. How are you, really?`,
+              `Hi ${p.name}, it's been too long. Free for a call this week? I owe you a proper catch-up.`];
+  const t2 = [`Hi ${p.name} — been a while since we caught up. Anything I can be useful with on your side? Coffee soon?`,
+              `Hey ${p.name}, saw something this week that made me think of our last conversation. Got 20 minutes this week?`];
+  const t3 = [`Hi ${p.name} — staying in touch as promised. Would be glad to hear what you're working on these days.`];
+  const pool = p.tier == 1 ? t1 : p.tier == 2 ? t2 : t3;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function copyText(t) {
+  if (navigator.clipboard) navigator.clipboard.writeText(t).catch(() => {});
+}
+
+/* =====================================================================
+   RENDERERS
+   ===================================================================== */
+function renderToday() {
+  document.getElementById("onboardCard").style.display = S.onboarded ? "none" : "block";
+  document.getElementById("briefText").textContent = buildBrief();
+  document.getElementById("briefMeta").textContent = "Generated " + new Date().toLocaleTimeString() + " · regenerated on every change · ▶ plays it aloud";
+
+  const q = buildQueue();
+  const list = document.getElementById("queueList");
+  list.innerHTML = q.length ? "" : '<div class="empty-note">Queue is clear. Meridian raises items here as soon as your systems drift.</div>';
+  for (const c of q.slice(0, 8)) {
+    const el = document.createElement("div");
+    el.className = "qcard sys-" + c.sys;
+    el.innerHTML = `<div class="q-sys">${esc(c.sys)}</div><div class="q-title">${esc(c.title)}</div>
+      <div class="q-detail">${esc(c.detail)}</div><div class="q-rec"><b>Recommendation:</b> ${esc(c.rec)}</div>
+      <div class="row"></div>`;
+    const row = el.querySelector(".row");
+    for (const a of c.actions) {
+      const b = document.createElement("button");
+      b.className = "btn small" + (a === c.actions[0] ? " primary" : "");
+      b.textContent = a.label;
+      b.onclick = () => { if (a.fn) a.fn(); logDecision(c.key, a.label); dismiss(c.key, a.fn !== null); };
+      row.appendChild(b);
+    }
+    list.appendChild(el);
+  }
+
+  const pc = document.getElementById("pendingCard"), pl = document.getElementById("pendingList");
+  pc.style.display = S.pending.length ? "block" : "none";
+  pl.innerHTML = "";
+  for (const p of S.pending) {
+    const hrs = Math.max(0, (p.executeAt - Date.now()) / 3600e3);
+    const el = document.createElement("div");
+    el.className = "pending";
+    el.innerHTML = `<div><div class="p-label">${esc(p.label)}</div><div class="p-when">Executes in ${hrs.toFixed(1)}h unless vetoed</div></div>`;
+    const b = document.createElement("button"); b.className = "btn small danger"; b.textContent = "Veto";
+    b.onclick = () => { S.pending = S.pending.filter(x => x.id !== p.id); logDecision(p.ref || p.id, "vetoed"); save(); renderAll(); toast("Vetoed. Correction logged — I learn from these."); };
+    el.appendChild(b); pl.appendChild(el);
+  }
+}
+
+function renderGoals() {
+  const wrap = document.getElementById("goalsList");
+  const wkStart = iso(mondayOf(new Date()));
+  wrap.innerHTML = S.goals.filter(g => g.status !== "killed").length ? "" : '<div class="empty-note">No goals yet. A goal here is a live graph node — linked to calendar blocks and audited weekly. No goal dies silently.</div>';
+  for (const g of S.goals) {
+    if (g.status === "killed") continue;
+    const wk = goalHrsInRange(g, wkStart, todayStr());
+    const pct = g.targetHrsWk ? Math.min(100, Math.round(wk / g.targetHrsWk * 100)) : 0;
+    const el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML = `
+      <div class="row spread">
+        <h3 style="margin-bottom:4px">${esc(g.title)}
+          <span class="chip ${g.priority === "high" ? "violet" : g.priority === "low" ? "muted" : "blue"}">${esc(g.priority)} priority</span>
+          <span class="chip ${pct >= 70 ? "green" : pct >= 30 ? "amber" : "red"}">${wk.toFixed(1)} / ${g.targetHrsWk}h this week</span>
+        </h3>
+        <div class="row">
+          <button class="btn small" data-act="log">＋ Log time</button>
+          <button class="btn small danger" data-act="kill">Kill</button>
+        </div>
+      </div>
+      <div class="muted" style="margin-bottom:8px">${esc(g.why || "")}</div>
+      <div class="capbar ${pct < 30 ? "over" : ""}"><div style="width:${pct}%"></div></div>`;
+    el.querySelector('[data-act="log"]').onclick = () => {
+      const hrs = parseFloat(prompt(`Hours toward “${g.title}” (today)?`, "1"));
+      if (hrs > 0) { (g.logs = g.logs || []).push({ date: todayStr(), hrs }); save(); renderAll(); toast("Logged."); }
+    };
+    el.querySelector('[data-act="kill"]').onclick = () => {
+      if (!confirm(`Kill “${g.title}” explicitly? It will be recorded in the Ledger.`)) return;
+      g.status = "killed"; addMemory("episodic", `Explicitly killed goal “${g.title}”.`, "Goals"); save(); renderAll();
+    };
+    wrap.appendChild(el);
+  }
+}
+
+function renderHabits() {
+  const today = todayStr();
+  const due = S.habits.filter(h => habitDueOn(h, today));
+  const load = due.reduce((s, h) => s + h.load, 0);
+  document.getElementById("capLabel").innerHTML = `Today's load: <b>${load}</b> of <b>${S.capacity}</b>`;
+  document.getElementById("capHint").textContent = load > S.capacity ? "Over budget — pre-decide a skip (see Decision Queue)" : load === 0 ? "Nothing scheduled today" : "Within budget";
+  const bar = document.getElementById("capBar");
+  bar.classList.toggle("over", load > S.capacity);
+  bar.firstElementChild.style.width = Math.min(100, load / S.capacity * 100) + "%";
+
+  // live verdict in the adder
+  const verdict = document.getElementById("hVerdict");
+  const newLoad = parseInt(document.getElementById("hLoad").value || "2");
+  verdict.textContent = load + newLoad > S.capacity
+    ? `⚠ Adding this puts a typical day at ${load + newLoad}/${S.capacity}. Meridian will ask you to pre-decide what gets skipped on heavy days.`
+    : `This fits: typical day would be ${load + newLoad}/${S.capacity}.`;
+
+  const wrap = document.getElementById("habitsList");
+  wrap.innerHTML = S.habits.length ? "" : '<div class="empty-note">No habits. Note: no streaks here — a portfolio with a capacity budget, and planned skips that don\'t count as failure.</div>';
+  const days14 = Array.from({ length: 14 }, (_, i) => iso(addDays(new Date(), i - 13)));
+  for (const h of S.habits) {
+    const el = document.createElement("div");
+    el.className = "card";
+    const doneToday = h.history[today] === true;
+    const dueDays = days14.filter(d => habitDueOn(h, d));
+    const doneN = dueDays.filter(d => h.history[d] === true).length;
+    const surv = dueDays.length ? Math.round(doneN / dueDays.length * 100) : 0;
+    el.innerHTML = `
+      <div class="row spread">
+        <h3 style="margin-bottom:6px">${esc(h.name)}
+          <span class="chip muted">load ${h.load}</span>
+          <span class="chip ${surv >= 70 ? "green" : surv >= 40 ? "amber" : "red"}">${surv}% survival (14d)</span>
+          ${h.keystone ? '<span class="chip violet">keystone</span>' : ""}
+        </h3>
+        <div class="row">
+          <button class="btn small ${doneToday ? "" : "primary"}" data-act="tick">${doneToday ? "✓ Done today" : "Mark done"}</button>
+          <button class="btn small danger" data-act="del">Remove</button>
+        </div>
+      </div>
+      <div class="hgrid">${days14.map(d => {
+        const on = habitDueOn(h, d);
+        const v = h.history[d];
+        return `<div class="hcell ${!on ? "off" : v === true ? "done" : v === "skipped" ? "" : d < today ? "miss" : ""}" title="${d}${v === "skipped" ? " (planned skip)" : ""}"></div>`;
+      }).join("")}</div>`;
+    el.querySelector('[data-act="tick"]').onclick = () => { h.history[today] = !doneToday; save(); renderAll(); };
+    el.querySelector('[data-act="del"]').onclick = () => { if (confirm(`Remove habit “${h.name}”?`)) { S.habits = S.habits.filter(x => x.id !== h.id); save(); renderAll(); } };
+    wrap.appendChild(el);
+  }
+  detectKeystone();
+}
+
+function detectKeystone() {
+  // keystone: habit whose completion days show meaningfully lower bank debits
+  if (!bank.length) return;
+  for (const h of S.habits) {
+    const doneDays = Object.keys(h.history).filter(d => h.history[d] === true);
+    if (doneDays.length < 5) { h.keystone = false; continue; }
+    const spendOn = day => bank.filter(t => t.withdrawal > 0 && String(t.date).startsWith(day)).reduce((s, t) => s + t.withdrawal, 0);
+    const onAvg = doneDays.reduce((s, d) => s + spendOn(d), 0) / doneDays.length;
+    const missDays = Object.keys(h.history).filter(d => h.history[d] !== true && habitDueOn(h, d));
+    if (missDays.length < 5) { h.keystone = false; continue; }
+    const offAvg = missDays.reduce((s, d) => s + spendOn(d), 0) / missDays.length;
+    h.keystone = offAvg > 0 && onAvg < offAvg * 0.7;
+  }
+}
+
+function renderCalendar() {
+  const dates = weekDates(week0);
+  document.getElementById("wkLabel").textContent = fmtDay(week0) + " – " + fmtDay(addDays(week0, 6));
+  const grid = document.getElementById("weekGrid");
+  grid.innerHTML = "";
+  const today = todayStr();
+  for (const d of dates) {
+    const day = document.createElement("div");
+    day.className = "day" + (d === today ? " today" : "");
+    day.innerHTML = `<div class="d-head">${fmtDay(new Date(d + "T00:00"))}</div>`;
+    const blocks = S.blocks.filter(b => b.date === d).sort((a, b) => a.start < b.start ? -1 : 1);
+    for (const b of blocks) {
+      const goal = S.goals.find(g => g.id === b.goalId);
+      const el = document.createElement("div");
+      el.className = `block k-${b.kind}` + (b.done ? " done" : "");
+      el.innerHTML = `${b.defended ? '<span class="b-shield" title="Defended block">🛡</span>' : ""}
+        <span class="b-time">${esc(b.start)}</span> ${esc(b.title)} <span class="muted">(${b.dur}h)</span>
+        ${goal ? `<div class="muted" style="font-size:11px">→ ${esc(goal.title)}</div>` : ""}
+        <div class="b-actions"><button class="btn small" data-a="done">${b.done ? "Undo" : "Done"}</button><button class="btn small danger" data-a="del">✕</button></div>`;
+      el.querySelector('[data-a="done"]').onclick = () => {
+        b.done = !b.done;
+        if (b.goalId) { // done blocks log hours to the linked goal
+          const g = S.goals.find(g => g.id === b.goalId);
+          if (g) {
+            g.logs = g.logs || [];
+            if (b.done) g.logs.push({ date: b.date, hrs: b.dur, blockId: b.id });
+            else g.logs = g.logs.filter(l => l.blockId !== b.id);
+          }
+        }
+        save(); renderAll();
+      };
+      el.querySelector('[data-a="del"]').onclick = () => {
+        if (b.defended && !confirm("This is a DEFENDED block. It has a displacement cost: the goal it protects loses its slot. Delete anyway?")) return;
+        S.blocks = S.blocks.filter(x => x.id !== b.id); save(); renderAll();
+      };
+      day.appendChild(el);
+    }
+    grid.appendChild(day);
+  }
+
+  // Calendar P&L chart
+  const hrs = {};
+  for (const b of S.blocks.filter(b => dates.includes(b.date) && b.done)) hrs[b.kind] = (hrs[b.kind] || 0) + b.dur;
+  const planned = {};
+  for (const b of S.blocks.filter(b => dates.includes(b.date))) planned[b.kind] = (planned[b.kind] || 0) + b.dur;
+  drawBar("calChart", Object.keys(KIND_LABELS).map(k => KIND_LABELS[k]),
+    [{ label: "Planned (h)", data: Object.keys(KIND_LABELS).map(k => planned[k] || 0), color: "muted" },
+     { label: "Done (h)", data: Object.keys(KIND_LABELS).map(k => hrs[k] || 0), color: "accent" }]);
+}
+
+function renderFinance() {
+  const st = document.getElementById("finStatus");
+  if (!bank.length) {
+    st.innerHTML = `<h3>💸 No bank data yet</h3><p class="muted">Meridian reads the statements you import in <a href="index.html">BankDash</a> (same browser, read-only). Import statements there and the Values P&L lights up here — no re-entry, no cloud.</p>`;
+  } else {
+    const dates = bank.map(t => t.date).sort();
+    st.innerHTML = `<h3>💸 Bank data connected <span class="chip green">read-only from BankDash</span></h3>
+      <div class="kpi">
+        <div class="k"><div class="kv">${bank.length}</div><div class="kl">transactions</div></div>
+        <div class="k"><div class="kv">${esc(String(dates[0]).slice(0,10))}</div><div class="kl">first</div></div>
+        <div class="k"><div class="kv">${esc(String(dates[dates.length-1]).slice(0,10))}</div><div class="kl">latest</div></div>
+      </div>`;
+  }
+
+  // values editor
+  const ve = document.getElementById("valuesEditor");
+  ve.innerHTML = "";
+  for (const v of S.values) {
+    const row = document.createElement("div");
+    row.className = "row"; row.style.marginBottom = "6px";
+    row.innerHTML = `<span class="chip violet">${esc(v.name)}</span><span class="muted" style="flex:1">${esc(v.keywords.join(", "))}</span>`;
+    const del = document.createElement("button"); del.className = "btn small danger"; del.textContent = "✕";
+    del.onclick = () => { S.values = S.values.filter(x => x.id !== v.id); save(); renderAll(); };
+    row.appendChild(del); ve.appendChild(row);
+  }
+
+  // Values P&L for current month
+  const ym = todayStr().slice(0, 7);
+  const pnl = valuesPnl(ym);
+  const labels = pnl.rows.map(r => r.name).concat(["Unaligned"]);
+  const data = pnl.rows.map(r => r.spend).concat([pnl.unaligned]);
+  drawBar("valChart", labels, [{ label: `Debits ${ym} (₹)`, data, color: "accent" }]);
+
+  const vt = document.getElementById("valTable");
+  if (!bank.length) { vt.innerHTML = ""; }
+  else {
+    const rows = pnl.rows.map(r => `<tr><td>${esc(r.name)}</td><td class="num">${fmtINR(r.spend)}</td><td class="num">${pnl.total ? Math.round(r.spend / pnl.total * 100) : 0}%</td></tr>`).join("");
+    vt.innerHTML = `<table><tr><th>Value</th><th class="num">This month</th><th class="num">Share</th></tr>${rows}
+      <tr><td><b>Unaligned</b> <span class="muted">(never mentioned caring about this)</span></td><td class="num"><b>${fmtINR(pnl.unaligned)}</b></td><td class="num"><b>${pnl.total ? Math.round(pnl.unaligned / pnl.total * 100) : 0}%</b></td></tr></table>
+      <p class="muted" style="margin-top:8px">No judgment — just the mirror. If a stated value sits at the bottom for two months running, the Decision Queue will raise it.</p>`;
+  }
+
+  // recurring
+  const rl = document.getElementById("recurringList");
+  const recs = bank.length ? recurringPayees() : [];
+  rl.innerHTML = recs.length ? `<table><tr><th>Payee</th><th class="num">Months</th><th class="num">~Monthly</th><th class="num">Total</th><th>Status</th></tr>` +
+    recs.map(r => `<tr><td>${esc(r.payee)}</td><td class="num">${r.months}</td><td class="num">${fmtINR(r.avg)}</td><td class="num">${fmtINR(r.total)}</td>
+      <td>${S.finKeep.includes(r.payee) ? '<span class="chip green">kept</span>' : '<span class="chip amber">in review queue</span>'}</td></tr>`).join("") + "</table>"
+    : '<div class="empty-note">No recurring payees detected (needs 3+ consecutive months of data).</div>';
+}
+
+function renderPeople() {
+  const wrap = document.getElementById("peopleList");
+  wrap.innerHTML = S.people.length ? "" : '<div class="empty-note">No people yet. Tier 1 = intimates, 2 = allies, 3 = network — each with a contact rhythm Meridian quietly defends.</div>';
+  if (S.people.length) {
+    const rows = S.people.sort((a, b) => a.tier - b.tier).map(p => {
+      const since = p.lastContact ? daysAgo(p.lastContact) : null;
+      const over = since === null || since > p.cadenceDays;
+      return `<tr><td><b>${esc(p.name)}</b><div class="muted" style="font-size:12px">${esc(p.notes || "")}</div></td>
+        <td><span class="chip ${p.tier == 1 ? "red" : p.tier == 2 ? "blue" : "muted"}">Tier ${p.tier}</span></td>
+        <td>every ${p.cadenceDays}d</td>
+        <td>${since === null ? "—" : since + "d ago"} ${over ? '<span class="chip amber">drifting</span>' : '<span class="chip green">in rhythm</span>'}</td>
+        <td class="row"><button class="btn small" data-id="${p.id}" data-a="contact">Log contact</button>
+        <button class="btn small danger" data-id="${p.id}" data-a="del">✕</button></td></tr>`;
+    }).join("");
+    wrap.innerHTML = `<table><tr><th>Person</th><th>Tier</th><th>Rhythm</th><th>Last contact</th><th></th></tr>${rows}</table>`;
+    wrap.querySelectorAll("button").forEach(b => b.onclick = () => {
+      const p = S.people.find(x => x.id === b.dataset.id);
+      if (b.dataset.a === "contact") { p.lastContact = todayStr(); (p.history = p.history || []).push({ date: todayStr() }); save(); renderAll(); toast(`${p.name}: logged.`); }
+      else if (confirm(`Remove ${p.name}?`)) { S.people = S.people.filter(x => x.id !== p.id); save(); renderAll(); }
+    });
+  }
+
+  // Touchpoint tray: most-overdue first, max 7
+  const tray = document.getElementById("trayList");
+  const overdue = S.people.map(p => ({ p, since: p.lastContact ? daysAgo(p.lastContact) : 999 }))
+    .filter(x => x.since > x.p.cadenceDays).sort((a, b) => (b.since - b.p.cadenceDays) - (a.since - a.p.cadenceDays)).slice(0, 7);
+  tray.innerHTML = overdue.length ? "" : '<div class="empty-note">Tray is empty — every relationship is inside its rhythm. Rare air.</div>';
+  for (const { p, since } of overdue) {
+    const d = draftFor(p);
+    const el = document.createElement("div");
+    el.className = "tp";
+    el.innerHTML = `<div class="tp-name">${esc(p.name)} <span class="chip ${p.tier == 1 ? "red" : "blue"}">T${p.tier}</span></div>
+      <div class="tp-why">${since === 999 ? "No contact on record" : since + " days — rhythm is " + p.cadenceDays}</div>
+      <div class="tp-draft">${esc(d)}</div><div class="row"></div>`;
+    const row = el.querySelector(".row");
+    const send = document.createElement("button"); send.className = "btn small primary"; send.textContent = "Copy & mark sent";
+    send.onclick = () => { copyText(d); p.lastContact = todayStr(); (p.history = p.history || []).push({ date: todayStr(), note: "tray" }); save(); renderAll(); toast("Copied — send it where you actually talk, then it's logged."); };
+    const skip = document.createElement("button"); skip.className = "btn small"; skip.textContent = "Skip";
+    skip.onclick = () => { p.skips = (p.skips || 0) + 1; if (p.skips >= 3) { toast(`Skipped ${p.name} 3×. Honest question: has the tier changed? (Edit in the table above.)`); p.skips = 0; } save(); renderAll(); };
+    row.append(send, skip);
+    tray.appendChild(el);
+  }
+}
+
+function renderLearning() {
+  const today = todayStr();
+  const due = S.learning.filter(c => !c.done && c.due <= today);
+  document.getElementById("dueCount").textContent = due.length + " due";
+  const fa = document.getElementById("flashArea");
+  if (!due.length) fa.innerHTML = '<div class="empty-note">Nothing due. Cards return on their schedule.</div>';
+  else {
+    const c = due[0];
+    fa.innerHTML = `<div class="flash"><div class="f-front">${esc(c.front)}</div>
+      <div class="f-back" id="fBack" style="display:none">${esc(c.back)}</div>
+      <div class="row" style="justify-content:center" id="fRow"><button class="btn primary" id="fReveal">Reveal</button></div></div>`;
+    document.getElementById("fReveal").onclick = () => {
+      document.getElementById("fBack").style.display = "block";
+      const row = document.getElementById("fRow");
+      row.innerHTML = "";
+      const grade = (mult, label) => {
+        const b = document.createElement("button"); b.className = "btn small" + (mult > 1 ? " primary" : ""); b.textContent = label;
+        b.onclick = () => {
+          c.interval = Math.max(1, Math.round((c.interval || 1) * mult));
+          if (mult <= 0.5) c.interval = 1;
+          c.due = iso(addDays(new Date(), c.interval));
+          c.reps = (c.reps || 0) + 1;
+          save(); renderAll();
+        };
+        return b;
+      };
+      row.append(grade(0.5, "Again (1d)"), grade(2, "Good (×2)"), grade(3, "Easy (×3)"));
+    };
+  }
+
+  // teach-back
+  const ta = document.getElementById("teachArea");
+  const topics = [...new Set(S.learning.map(c => c.topic))];
+  if (!topics.length) ta.innerHTML = '<div class="empty-note">Add cards first — then Meridian asks you to pitch a topic back.</div>';
+  else {
+    const topic = topics[new Date().getDate() % topics.length];
+    ta.innerHTML = `<div style="font-weight:600;margin-bottom:8px">Explain “${esc(topic)}” like I'm your board. No notes.</div>
+      <textarea id="tbText" rows="4" placeholder="Type (or dictate) your explanation…"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn primary" id="tbDone">I nailed it</button>
+        <button class="btn" id="tbFumble">I fumbled — requeue topic</button>
+      </div>`;
+    document.getElementById("tbDone").onclick = () => {
+      addMemory("episodic", `Teach-back passed on “${topic}”.`, "Teach-back");
+      save(); toast("Logged. Fluency confirmed."); renderAll();
+    };
+    document.getElementById("tbFumble").onclick = () => {
+      for (const c of S.learning.filter(c => c.topic === topic)) { c.due = todayStr(); c.interval = 1; }
+      save(); toast(`All “${topic}” cards pulled back to today. Honest beats comfortable.`); renderAll();
+    };
+  }
+
+  const ll = document.getElementById("learnList");
+  ll.innerHTML = S.learning.length ? `<table><tr><th>Topic</th><th>Prompt</th><th>Next due</th><th class="num">Reps</th><th></th></tr>` +
+    S.learning.map(c => `<tr><td>${esc(c.topic)}</td><td>${esc(c.front)}</td><td>${esc(c.due)}</td><td class="num">${c.reps || 0}</td>
+      <td><button class="btn small danger" data-id="${c.id}">✕</button></td></tr>`).join("") + "</table>"
+    : '<div class="empty-note">Queue is empty. The best source: things you were vague about in real conversations this week.</div>';
+  ll.querySelectorAll("button").forEach(b => b.onclick = () => { S.learning = S.learning.filter(x => x.id !== b.dataset.id); save(); renderAll(); });
+}
+
+const INTERVIEW_QS = [
+  "What drained you most this week — and was it avoidable?",
+  "Name one commitment you made recently that you haven't written down anywhere.",
+  "Which relationship deserves more from you than it's getting right now?",
+  "What did you spend money on this month that future-you will respect?",
+  "What's one thing you believe about your work that you haven't re-examined in a year?",
+  "Who impressed you recently, and why exactly?",
+  "What are you avoiding deciding?",
+  "If this week repeated 50 times, what would you change about it?"
+];
+let interviewIdx = Math.floor(Math.random() * INTERVIEW_QS.length);
+
+function renderLedger() {
+  const filt = document.getElementById("memFilter").value;
+  const list = document.getElementById("memList");
+  const mems = S.memories.filter(m => !m.archived && (filt === "all" || m.layer === filt)).sort((a, b) => b.createdAt < a.createdAt ? -1 : 1);
+  list.innerHTML = mems.length ? "" : '<div class="empty-note">Nothing here yet. Every memory shows its provenance — an assistant you can\'t audit is an assistant you\'ll eventually distrust.</div>';
+  for (const m of mems) {
+    const age = daysAgo(m.confirmedAt || m.createdAt);
+    const stale = m.layer === "semantic" && age > 90;
+    const el = document.createElement("div");
+    el.className = "mem";
+    el.innerHTML = `<div class="m-text">${esc(m.text)}</div>
+      <div class="m-meta">
+        <span class="chip ${m.layer === "narrative" ? "violet" : m.layer === "semantic" ? "blue" : m.layer === "procedural" ? "amber" : "muted"}">${esc(m.layer)}</span>
+        <span>source: ${esc(m.source)}</span><span>recorded ${esc(m.createdAt)}</span>
+        ${stale ? '<span class="chip amber">stale — unconfirmed ' + age + 'd</span>' : ""}
+        <span style="margin-left:auto" class="row">
+          <button class="btn small" data-a="confirm">Still true</button>
+          <button class="btn small danger" data-a="forget">Forget</button>
+        </span>
+      </div>`;
+    el.querySelector('[data-a="confirm"]').onclick = () => { m.confirmedAt = todayStr(); save(); renderAll(); };
+    el.querySelector('[data-a="forget"]').onclick = () => { m.archived = true; save(); renderAll(); toast("Forgotten."); };
+    list.appendChild(el);
+  }
+  document.getElementById("interviewQ").textContent = INTERVIEW_QS[interviewIdx];
+}
+
+/* ---------------- Sunday Board ritual ---------------- */
+const RITUAL = ["Calendar P&L", "Values P&L", "Goal scorecard", "Touchpoint tray", "Autonomy & close"];
+function renderRitual() {
+  const steps = document.getElementById("ritualSteps");
+  steps.innerHTML = RITUAL.map((s, i) => `<span class="st ${i === ritualStep ? "cur" : i < ritualStep ? "donestep" : ""}">${i + 1}. ${s}</span>`).join("");
+  const body = document.getElementById("ritualBody");
+  const wkStart = iso(mondayOf(new Date())), today = todayStr();
+  const dates = weekDates(mondayOf(new Date()));
+
+  if (ritualStep === 0) {
+    const done = {}, plan = {};
+    for (const b of S.blocks.filter(b => dates.includes(b.date))) { plan[b.kind] = (plan[b.kind] || 0) + b.dur; if (b.done) done[b.kind] = (done[b.kind] || 0) + b.dur; }
+    const rows = Object.keys(KIND_LABELS).map(k => `<tr><td>${KIND_LABELS[k]}</td><td class="num">${(plan[k] || 0).toFixed(1)}</td><td class="num">${(done[k] || 0).toFixed(1)}</td></tr>`).join("");
+    const noShow = S.blocks.filter(b => dates.includes(b.date) && b.date < today && !b.done);
+    body.innerHTML = `<p class="muted" style="margin-bottom:10px">Where the attention actually went this week.</p>
+      <table><tr><th>Kind</th><th class="num">Planned (h)</th><th class="num">Done (h)</th></tr>${rows}</table>
+      ${noShow.length ? `<p style="margin-top:10px">⚠ <b>${noShow.length} block${noShow.length > 1 ? "s" : ""} never happened</b> — including ${noShow.slice(0, 3).map(b => `“${esc(b.title)}”`).join(", ")}. Recurring offenders should be killed, not rescheduled forever.</p>` : '<p style="margin-top:10px" class="muted">Every planned block happened. Exceptional.</p>'}`;
+  } else if (ritualStep === 1) {
+    const pnl = bank.length ? valuesPnl(today.slice(0, 7)) : null;
+    body.innerHTML = pnl ? `<p class="muted" style="margin-bottom:10px">Your stated values vs. the month's actual money flow. No judgment — just the mirror.</p>
+      <table><tr><th>Value</th><th class="num">Spend</th><th class="num">Share</th></tr>
+      ${pnl.rows.map(r => `<tr><td>${esc(r.name)}</td><td class="num">${fmtINR(r.spend)}</td><td class="num">${pnl.total ? Math.round(r.spend / pnl.total * 100) : 0}%</td></tr>`).join("")}
+      <tr><td><b>Unaligned</b></td><td class="num"><b>${fmtINR(pnl.unaligned)}</b></td><td class="num"><b>${pnl.total ? Math.round(pnl.unaligned / pnl.total * 100) : 0}%</b></td></tr></table>`
+      : '<p class="muted">Connect bank data via BankDash to see the Values P&L here.</p>';
+  } else if (ritualStep === 2) {
+    const rows = S.goals.filter(g => g.status === "active").map(g => {
+      const wk = goalHrsInRange(g, wkStart, today);
+      const pct = g.targetHrsWk ? Math.round(wk / g.targetHrsWk * 100) : 0;
+      return `<tr><td>${esc(g.title)} ${g.priority === "high" ? '<span class="chip violet">top</span>' : ""}</td>
+        <td class="num">${g.targetHrsWk}h</td><td class="num">${wk.toFixed(1)}h</td>
+        <td><span class="chip ${pct >= 70 ? "green" : pct >= 30 ? "amber" : "red"}">${pct}%</span></td></tr>`;
+    }).join("");
+    body.innerHTML = rows ? `<p class="muted" style="margin-bottom:10px">Per goal: what you said vs. what you did. Anything red for two straight weeks triggers the recommit/renegotiate/kill conversation.</p>
+      <table><tr><th>Goal</th><th class="num">Target</th><th class="num">Actual</th><th>Alignment</th></tr>${rows}</table>`
+      : '<p class="muted">No active goals. The board has nothing to govern.</p>';
+  } else if (ritualStep === 3) {
+    const overdue = S.people.filter(p => (p.lastContact ? daysAgo(p.lastContact) : 999) > p.cadenceDays);
+    body.innerHTML = overdue.length
+      ? `<p class="muted" style="margin-bottom:10px">${overdue.length} relationship${overdue.length > 1 ? "s" : ""} past rhythm. The tray (People tab) has drafts ready — ten minutes tends the whole layer.</p>
+        <ul style="margin-left:18px">${overdue.map(p => `<li><b>${esc(p.name)}</b> — ${p.lastContact ? daysAgo(p.lastContact) + " days" : "never contacted"}</li>`).join("")}</ul>`
+      : '<p class="muted">Everyone is inside their rhythm this week.</p>';
+  } else {
+    // autonomy promotions: earned by approvals
+    const finApprovals = S.decisions.log.filter(l => l.key.startsWith("sub-") && !l.action.startsWith("vetoed")).length;
+    const promo = S.autonomy.finance === "draft" && finApprovals >= 5;
+    body.innerHTML = `<p class="muted" style="margin-bottom:10px">Decisions this period: ${S.decisions.log.length}. Vetoes: ${S.decisions.log.filter(l => l.action === "vetoed").length}.</p>
+      ${promo ? `<div class="qcard sys-finance"><div class="q-sys">autonomy</div><div class="q-title">Promotion request</div>
+        <div class="q-detail">You've approved ${finApprovals} finance drafts with no vetoes of consequence. May I move Finance to “act with 48-hour veto window”?</div>
+        <div class="row"><button class="btn small primary" id="promoYes">Promote</button><button class="btn small" id="promoNo">Not yet</button></div></div>`
+      : '<p class="muted">No autonomy promotions to propose yet — trust is earned in inches.</p>'}
+      <p style="margin-top:10px">Close the board to timestamp this review. Last review: <b>${S.lastReview || "never"}</b>.</p>
+      <button class="btn primary" id="closeBoard" style="margin-top:8px">Close the board ✓</button>`;
+    const py = document.getElementById("promoYes"), pn = document.getElementById("promoNo");
+    if (py) py.onclick = () => { S.autonomy.finance = "act-veto"; save(); renderAll(); toast("Promoted. Every action now announces itself with a 48h veto window."); };
+    if (pn) pn.onclick = () => { toast("Noted. I'll ask again when the record is longer."); };
+    document.getElementById("closeBoard").onclick = () => {
+      S.lastReview = today;
+      addMemory("episodic", "Sunday Board completed.", "Ritual");
+      save(); renderAll(); toast("Board closed. See you next Sunday.");
+    };
+  }
+}
+
+/* ---------------- charts ---------------- */
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function drawBar(id, labels, series) {
+  const ctx = document.getElementById(id);
+  if (!ctx || typeof Chart === "undefined") return;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(ctx, {
+    type: "bar",
+    data: { labels, datasets: series.map(s => ({ label: s.label, data: s.data, borderRadius: 6,
+      backgroundColor: s.color === "accent" ? cssVar("--accent") : "rgba(128,134,148,0.45)" })) },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: cssVar("--text-muted") } } },
+      scales: { x: { ticks: { color: cssVar("--text-muted") }, grid: { color: cssVar("--chart-grid") } },
+                y: { ticks: { color: cssVar("--text-muted") }, grid: { color: cssVar("--chart-grid") }, beginAtZero: true } } }
+  });
+}
+
+/* ---------------- seed demo ---------------- */
+function seedDemo() {
+  const t = new Date();
+  const g1 = { id: uid(), title: "Ship the side project", why: "Independence — the thing I keep saying matters most", targetHrsWk: 6, priority: "high", status: "active", createdAt: iso(addDays(t, -40)), logs: [{ date: iso(addDays(t, -9)), hrs: 2 }] };
+  const g2 = { id: uid(), title: "Get genuinely fit", why: "Energy is the multiplier on everything else", targetHrsWk: 4, priority: "normal", status: "active", createdAt: iso(addDays(t, -60)), logs: [{ date: iso(addDays(t, -2)), hrs: 1 }, { date: iso(addDays(t, -1)), hrs: 1 }] };
+  const g3 = { id: uid(), title: "Inbox-zero workflow tinkering", why: "", targetHrsWk: 1, priority: "low", status: "active", createdAt: iso(addDays(t, -30)), logs: [{ date: iso(addDays(t, -1)), hrs: 2 }, { date: todayStr(), hrs: 1.5 }] };
+  S.goals.push(g1, g2, g3);
+  const mkHist = (days, rate) => { const h = {}; for (let i = 1; i <= days; i++) if (Math.random() < rate) h[iso(addDays(t, -i))] = true; return h; };
+  S.habits.push(
+    { id: uid(), name: "Morning walk before screens", load: 1, days: "all", history: mkHist(14, 0.8), createdAt: iso(addDays(t, -30)) },
+    { id: uid(), name: "Deep work: 90 min, phone in drawer", load: 3, days: "wk", history: mkHist(14, 0.5), createdAt: iso(addDays(t, -30)) },
+    { id: uid(), name: "Read 20 pages", load: 2, days: "all", history: mkHist(14, 0.6), createdAt: iso(addDays(t, -20)) }
+  );
+  S.people.push(
+    { id: uid(), name: "Amma", tier: 1, cadenceDays: 3, lastContact: iso(addDays(t, -6)), notes: "Calls matter more than messages", history: [] },
+    { id: uid(), name: "Ravi (college roommate)", tier: 1, cadenceDays: 30, lastContact: iso(addDays(t, -52)), notes: "Promised dinner 'soon' six weeks ago", history: [] },
+    { id: uid(), name: "Priya (ex-manager)", tier: 2, cadenceDays: 60, lastContact: iso(addDays(t, -75)), notes: "Offered to intro me to her network", history: [] },
+    { id: uid(), name: "Arjun (conference contact)", tier: 3, cadenceDays: 90, lastContact: iso(addDays(t, -30)), notes: "Building in the same space", history: [] }
+  );
+  S.values.push(
+    { id: uid(), name: "Health", keywords: ["gym", "pharmacy", "decathlon", "cult", "hospital", "clinic"] },
+    { id: uid(), name: "Learning", keywords: ["book", "udemy", "course", "kindle", "amazon"] },
+    { id: uid(), name: "Family", keywords: ["gift", "flight", "irctc", "makemytrip"] }
+  );
+  S.memories.push(
+    { id: uid(), layer: "narrative", text: "Family dinners are non-negotiable — said after the March burnout week.", source: "Interview Mode", confidence: "high", createdAt: iso(addDays(t, -90)), confirmedAt: iso(addDays(t, -90)), archived: false },
+    { id: uid(), layer: "semantic", text: "Co-founder prefers decisions in writing, hates surprise meetings.", source: "observed across 6 meetings", confidence: "high", createdAt: iso(addDays(t, -120)), confirmedAt: iso(addDays(t, -120)), archived: false },
+    { id: uid(), layer: "procedural", text: "Decline meetings with no agenda; offer async first.", source: "you, after the Q1 calendar audit", confidence: "high", createdAt: iso(addDays(t, -45)), confirmedAt: todayStr(), archived: false },
+    { id: uid(), layer: "episodic", text: "Told Ravi 'dinner soon' — no date set.", source: "call summary", confidence: "medium", createdAt: iso(addDays(t, -42)), confirmedAt: iso(addDays(t, -42)), archived: false }
+  );
+  const wk = mondayOf(t);
+  const dow = (t.getDay() + 6) % 7;
+  S.blocks.push(
+    { id: uid(), date: iso(addDays(wk, dow)), start: "08:00", dur: 1.5, title: "Side project — deep block", kind: "deep", goalId: g1.id, done: false, defended: true },
+    { id: uid(), date: iso(addDays(wk, dow)), start: "19:30", dur: 1.5, title: "Family dinner", kind: "family", goalId: "", done: false, defended: true },
+    { id: uid(), date: iso(addDays(wk, Math.min(dow + 1, 6))), start: "07:00", dur: 1, title: "Gym", kind: "health", goalId: g2.id, done: false, defended: false },
+    { id: uid(), date: iso(addDays(wk, Math.min(dow + 1, 6))), start: "11:00", dur: 1, title: "1:1 with co-founder", kind: "meeting", goalId: "", done: false, defended: false }
+  );
+  S.learning.push(
+    { id: uid(), topic: "Pricing", goalId: g1.id, front: "Why price against the salary line, not the software line?", back: "Budgets for headcount are 10–100× software budgets; outcome framing inherits the bigger comparison set.", due: todayStr(), interval: 1, reps: 0 },
+    { id: uid(), topic: "Pricing", goalId: g1.id, front: "What's the veto-window pattern?", back: "Announce the action, give a cancel window, then act — preserves control AND attention; the ask-permission pattern destroys one or the other.", due: todayStr(), interval: 1, reps: 0 },
+    { id: uid(), topic: "Negotiation", goalId: "", front: "First move when the other side anchors high?", back: "Don't counter immediately — reframe the metric the anchor lives in, then counter inside your frame.", due: iso(addDays(t, 2)), interval: 2, reps: 1 }
+  );
+  S.onboarded = true;
+  save();
+}
+
+/* ---------------- wiring ---------------- */
+function switchTab(name) {
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab-pane").forEach(p => p.classList.toggle("active", p.id === "pane-" + name));
+  renderAll();
+}
+function fillGoalSelects() {
+  for (const id of ["bGoal", "lGoal"]) {
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">No linked goal</option>' + S.goals.filter(g => g.status === "active").map(g => `<option value="${g.id}">→ ${esc(g.title)}</option>`).join("");
+    sel.value = cur;
+  }
+}
+function renderAll() {
+  processPending();
+  fillGoalSelects();
+  renderToday(); renderGoals(); renderHabits(); renderCalendar();
+  renderFinance(); renderPeople(); renderLearning(); renderLedger(); renderRitual();
+  document.getElementById("statCal").textContent = S.decisions.log.filter(l => l.key.startsWith("cal")).length;
+  document.getElementById("statFin").textContent = S.decisions.log.filter(l => l.key.startsWith("sub-")).length;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  load();
+  // theme
+  const savedTheme = S.settings.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = savedTheme;
+  const themeBtn = document.getElementById("themeBtn");
+  const setThemeBtn = () => themeBtn.textContent = document.documentElement.dataset.theme === "dark" ? "☀️ Light" : "🌙 Dark";
+  setThemeBtn();
+  themeBtn.onclick = () => {
+    document.documentElement.dataset.theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    S.settings.theme = document.documentElement.dataset.theme; save(); setThemeBtn(); renderAll();
+  };
+
+  // tabs
+  document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+
+  // onboarding
+  document.getElementById("seedBtn").onclick = () => { seedDemo(); renderAll(); toast("Example life loaded — explore, then wipe it in Settings when ready."); };
+  document.getElementById("startBlankBtn").onclick = () => { S.onboarded = true; save(); renderAll(); };
+
+  // brief
+  document.getElementById("briefPlayBtn").onclick = () => speak(buildBrief());
+  document.getElementById("briefStopBtn").onclick = () => speechSynthesis && speechSynthesis.cancel();
+
+  // goals
+  document.getElementById("gAdd").onclick = () => {
+    const title = document.getElementById("gTitle").value.trim();
+    if (!title) return toast("Goal needs a title.", true);
+    S.goals.push({ id: uid(), title, why: document.getElementById("gWhy").value.trim(),
+      targetHrsWk: parseFloat(document.getElementById("gHrs").value) || 0,
+      priority: document.getElementById("gPri").value, status: "active", createdAt: todayStr(), logs: [] });
+    document.getElementById("gTitle").value = ""; document.getElementById("gWhy").value = ""; document.getElementById("gHrs").value = "";
+    save(); renderAll(); toast("Goal added to the graph.");
+  };
+
+  // habits
+  document.getElementById("hLoad").onchange = renderHabits;
+  document.getElementById("hAdd").onclick = () => {
+    const name = document.getElementById("hName").value.trim();
+    if (!name) return toast("Habit needs a name.", true);
+    S.habits.push({ id: uid(), name, load: parseInt(document.getElementById("hLoad").value), days: document.getElementById("hDays").value === "all" ? "all" : document.getElementById("hDays").value, history: {}, createdAt: todayStr() });
+    document.getElementById("hName").value = "";
+    save(); renderAll(); toast("Habit added within budget.");
+  };
+
+  // calendar
+  document.getElementById("bDate").value = todayStr();
+  document.getElementById("wkPrev").onclick = () => { week0 = addDays(week0, -7); renderCalendar(); };
+  document.getElementById("wkNext").onclick = () => { week0 = addDays(week0, 7); renderCalendar(); };
+  document.getElementById("bAdd").onclick = () => {
+    const title = document.getElementById("bTitle").value.trim();
+    if (!title) return toast("Block needs a title.", true);
+    addBlock(document.getElementById("bDate").value, document.getElementById("bStart").value,
+      parseFloat(document.getElementById("bDur").value) || 1, title, document.getElementById("bKind").value,
+      document.getElementById("bGoal").value, document.getElementById("bDef").checked);
+    document.getElementById("bTitle").value = "";
+    renderAll(); toast("Block placed.");
+  };
+
+  // finance values
+  document.getElementById("vAdd").onclick = () => {
+    const name = document.getElementById("vName").value.trim();
+    const keys = document.getElementById("vKeys").value.split(",").map(s => s.trim()).filter(Boolean);
+    if (!name || !keys.length) return toast("Value needs a name and at least one keyword.", true);
+    S.values.push({ id: uid(), name, keywords: keys });
+    document.getElementById("vName").value = ""; document.getElementById("vKeys").value = "";
+    save(); renderAll();
+  };
+
+  // people
+  document.getElementById("pAdd").onclick = () => {
+    const name = document.getElementById("pName").value.trim();
+    if (!name) return toast("Person needs a name.", true);
+    S.people.push({ id: uid(), name, tier: parseInt(document.getElementById("pTier").value),
+      cadenceDays: parseInt(document.getElementById("pCad").value) || 30,
+      notes: document.getElementById("pNote").value.trim(), lastContact: null, history: [] });
+    document.getElementById("pName").value = ""; document.getElementById("pNote").value = "";
+    save(); renderAll();
+  };
+
+  // learning
+  document.getElementById("lAdd").onclick = () => {
+    const topic = document.getElementById("lTopic").value.trim(), front = document.getElementById("lFront").value.trim();
+    if (!topic || !front) return toast("Card needs a topic and a prompt.", true);
+    S.learning.push({ id: uid(), topic, goalId: document.getElementById("lGoal").value,
+      front, back: document.getElementById("lBack").value.trim(), due: todayStr(), interval: 1, reps: 0 });
+    document.getElementById("lTopic").value = ""; document.getElementById("lFront").value = ""; document.getElementById("lBack").value = "";
+    save(); renderAll();
+  };
+  document.getElementById("seminarBtn").onclick = () => {
+    const due = S.learning.filter(c => !c.done && c.due <= todayStr());
+    if (!due.length) return toast("Nothing due — seminar would be silence.");
+    speak("Commute seminar. " + due.map((c, i) => `Card ${i + 1}. ${c.front} ... ${c.back}`).join(" Next. "));
+  };
+
+  // ledger
+  document.getElementById("memFilter").onchange = renderLedger;
+  document.getElementById("mAdd").onclick = () => {
+    const text = document.getElementById("mText").value.trim();
+    if (!text) return toast("Memory needs content.", true);
+    addMemory(document.getElementById("mLayer").value, text, document.getElementById("mSource").value.trim() || "manual");
+    document.getElementById("mText").value = ""; document.getElementById("mSource").value = "";
+    save(); renderAll(); toast("Recorded with provenance.");
+  };
+  document.getElementById("interviewSave").onclick = () => {
+    const a = document.getElementById("interviewA").value.trim();
+    if (!a) return toast("Answer first — elicitation only works if you talk.", true);
+    addMemory("episodic", `Q: ${INTERVIEW_QS[interviewIdx]} — A: ${a}`, "Interview Mode");
+    document.getElementById("interviewA").value = "";
+    interviewIdx = (interviewIdx + 1) % INTERVIEW_QS.length;
+    save(); renderAll(); toast("Saved. One more question next time.");
+  };
+  document.getElementById("interviewSkip").onclick = () => { interviewIdx = (interviewIdx + 1) % INTERVIEW_QS.length; renderLedger(); };
+
+  // ritual
+  document.getElementById("ritualPrev").onclick = () => { ritualStep = Math.max(0, ritualStep - 1); renderRitual(); };
+  document.getElementById("ritualNext").onclick = () => { ritualStep = Math.min(RITUAL.length - 1, ritualStep + 1); renderRitual(); };
+
+  // settings
+  for (const [id, dom] of [["autCalendar", "calendar"], ["autFinance", "finance"], ["autPeople", "people"]]) {
+    const sel = document.getElementById(id);
+    sel.innerHTML = AUT_LEVELS.map(l => `<option value="${l}">${AUT_LABELS[l]}</option>`).join("");
+    sel.value = S.autonomy[dom];
+    sel.onchange = () => { S.autonomy[dom] = sel.value; save(); renderAll(); toast(`${dom}: ${AUT_LABELS[sel.value]}. Demotion is always one tap.`); };
+  }
+  document.getElementById("setCap").value = S.capacity;
+  document.getElementById("setRate").value = S.settings.rate || 1;
+  document.getElementById("setSave").onclick = () => {
+    S.capacity = parseInt(document.getElementById("setCap").value) || 6;
+    S.settings.rate = parseFloat(document.getElementById("setRate").value) || 1;
+    save(); renderAll(); toast("Saved.");
+  };
+
+  // data
+  const doExport = () => {
+    const blob = new Blob([JSON.stringify(S, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "meridian-" + todayStr() + ".json"; a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  document.getElementById("exportBtn").onclick = doExport;
+  document.getElementById("exportBtn2").onclick = doExport;
+  document.getElementById("importBtn").onclick = () => document.getElementById("importFile").click();
+  document.getElementById("importFile").onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    f.text().then(t => {
+      try { S = Object.assign(defaultState(), JSON.parse(t)); save(); renderAll(); toast("Imported."); }
+      catch { toast("Not a valid Meridian export.", true); }
+    });
+  };
+  document.getElementById("wipeBtn").onclick = () => {
+    if (!confirm("Forget everything? This deletes all Meridian data in this browser. Deletion is real deletion.")) return;
+    localStorage.removeItem(LS_KEY); load(); renderAll(); toast("Forgotten. All of it.");
+  };
+
+  renderAll();
+});
+</script>
+</body>
+</html>
