@@ -286,7 +286,7 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
       <div class="logo">₹</div>
       <div>
         <h1>BankDash</h1>
-        <div class="sub">Client-side bank statement dashboard · data never leaves your browser</div>
+        <div class="sub">Client-side bank statement dashboard · data never leaves your browser · <span id="buildBadge"></span></div>
       </div>
     </div>
     <div class="topbar-actions">
@@ -491,6 +491,7 @@ if (window.pdfjsLib) {
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 }
 
+const APP_BUILD = "v7 · 2026-06-12";
 const LS_TX = "bankdash_transactions";
 const LS_META = "bankdash_meta";
 const PAGE_SIZE = 50;
@@ -1847,6 +1848,7 @@ function refreshAll() {
 /* ============================ init ============================ */
 
 loadState();
+$("buildBadge").textContent = "build " + APP_BUILD;
 const preferredTheme = meta.theme ||
   (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 document.documentElement.dataset.theme = preferredTheme;
