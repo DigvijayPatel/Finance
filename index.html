@@ -491,7 +491,7 @@ if (window.pdfjsLib) {
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 }
 
-const APP_BUILD = "v7 · 2026-06-12";
+const APP_BUILD = "v8 · 2026-06-12";
 const LS_TX = "bankdash_transactions";
 const LS_META = "bankdash_meta";
 const PAGE_SIZE = 50;
@@ -1041,7 +1041,9 @@ function parsePdfColumns(pages, fileName) {
   let anchors = null;
   const rows = [];
   let done = false;
+  let pi = -1;
   for (const page of pages) {
+    pi++;
     if (done) break;
     let sawTable = false;   // header or first main line seen on this page
     let pageTop = [];       // text rows above the table area (page furniture unless dated)
@@ -1092,11 +1094,11 @@ function parsePdfColumns(pages, fileName) {
           pageTop = [];
           sawTable = true;
         }
-        rows.push({ type: "main", y: line.y, date: txnDate, ref, withdrawal, deposit,
+        rows.push({ type: "main", y: line.y, page: pi, date: txnDate, ref, withdrawal, deposit,
           balance: balAmts[balAmts.length - 1].v,
           ownNarr: narrParts.join(" ").trim(), preNarr: [], postNarr: [] });
       } else if (narrParts.length || txnDate) {
-        const row = { type: "text", y: line.y, narr: narrParts.join(" ").trim(), dateCol: txnDate };
+        const row = { type: "text", y: line.y, page: pi, narr: narrParts.join(" ").trim(), dateCol: txnDate };
         if (sawTable) rows.push(row);
         else pageTop.push(row);
       }
@@ -1104,8 +1106,15 @@ function parsePdfColumns(pages, fileName) {
   }
   if (!anchors) return null; // no recognizable table header — let the caller fall back
 
-  // attach narration-only rows to the right transaction
+  // attach narration-only rows to the right transaction.
+  // Layout vote: when virtually every main line carries its own narration,
+  // wrapped lines always sit BELOW their row — attach to previous. Otherwise
+  // (straddle layouts, narration centred around the amounts line) assign by
+  // page-aware y-proximity.
   const mains = rows.filter((r) => r.type === "main");
+  const ownNarrFrac = mains.length ? mains.filter((m) => m.ownNarr).length / mains.length : 1;
+  const straddle = ownNarrFrac < 0.9;
+  const dist = (a, b) => a.page === b.page ? Math.abs(a.y - b.y) : 1e9;
   let mi = -1, stickyNext = false;
   for (const r of rows) {
     if (r.type === "main") { mi++; stickyNext = false; continue; }
@@ -1116,8 +1125,11 @@ function parsePdfColumns(pages, fileName) {
     else if (stickyNext && next) target = next;
     else if (!next) target = prev;
     else if (!prev) target = next;
-    else if (next.ownNarr) target = prev;
-    else target = Math.abs(r.y - prev.y) <= Math.abs(r.y - next.y) ? prev : next;
+    else if (!straddle) target = prev;
+    else {
+      const dp = dist(r, prev), dn = dist(r, next);
+      target = dp <= dn ? prev : next;
+    }
     if (!r.narr || !target) continue;
     if (target === next) next.preNarr.push(r.narr);
     else prev.postNarr.push(r.narr);
